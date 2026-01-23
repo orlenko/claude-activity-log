@@ -179,6 +179,77 @@ class QueryHelper:
         """Get overall statistics."""
         return self.db.get_stats(since)
 
+    def get_recent_projects_with_sessions(
+        self,
+        project_limit: int = 4,
+        sessions_per_project: int = 3
+    ) -> list[dict]:
+        """Get projects sorted by most recent session, with their recent sessions.
+
+        Returns a tree structure:
+        [
+            {
+                'project': {...},
+                'last_activity': datetime,
+                'sessions': [
+                    {'session': {...}, 'first_message': '...'},
+                    ...
+                ]
+            },
+            ...
+        ]
+        """
+        with self.db.connection() as conn:
+            # Get projects with their most recent session timestamp
+            cursor = conn.execute("""
+                SELECT p.*, MAX(s.started_at) as last_activity
+                FROM projects p
+                JOIN sessions s ON s.project_id = p.id
+                GROUP BY p.id
+                ORDER BY last_activity DESC
+                LIMIT ?
+            """, (project_limit,))
+            projects_with_activity = [dict(row) for row in cursor.fetchall()]
+
+        result = []
+        for proj in projects_with_activity:
+            # Get recent sessions for this project
+            sessions = self.db.list_sessions(project_id=proj['id'], limit=sessions_per_project)
+
+            # Enrich sessions with message counts and first message
+            enriched_sessions = []
+            for session in sessions:
+                messages = self.db.get_messages_for_session(session['id'])
+                user_messages = [m for m in messages if m.get('role') == 'user']
+
+                session['user_count'] = len(user_messages)
+                session['assistant_count'] = len([m for m in messages if m.get('role') == 'assistant'])
+
+                # Get first user message as snippet
+                session['first_message'] = None
+                for msg in user_messages:
+                    content = msg.get('content') or ''
+                    content = content.strip()
+                    if content and not content.startswith('[Tool:'):
+                        first_line = content.split('\n')[0]
+                        if len(first_line) > 100:
+                            first_line = first_line[:100] + '...'
+                        session['first_message'] = first_line
+                        break
+
+                # Only include sessions with actual messages
+                if session['user_count'] > 0 or session['assistant_count'] > 0:
+                    enriched_sessions.append(session)
+
+            if enriched_sessions:
+                result.append({
+                    'project': proj,
+                    'last_activity': proj['last_activity'],
+                    'sessions': enriched_sessions
+                })
+
+        return result
+
     def search_messages(
         self,
         query: str,

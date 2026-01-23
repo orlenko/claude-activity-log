@@ -148,22 +148,19 @@ def create_app(config=None):
         # Get today's activity
         today_activity = helper.get_today_activity()
 
-        # Get recent sessions
-        recent_sessions = helper.get_recent_sessions(limit=10)
-        recent_sessions = [s for s in recent_sessions
-                         if s.get('user_count', 0) > 0 or s.get('assistant_count', 0) > 0]
-
         # Get stats
         stats = db.get_stats()
 
-        # Get projects
-        projects = db.list_projects()
+        # Get recent projects with their sessions (tree structure)
+        recent_activity = helper.get_recent_projects_with_sessions(
+            project_limit=4,
+            sessions_per_project=3
+        )
 
         return render_template('index.html',
                              today=today_activity,
-                             recent_sessions=recent_sessions,
                              stats=stats,
-                             projects=projects)
+                             recent_activity=recent_activity)
 
     @app.route('/today')
     def today():

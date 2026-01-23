@@ -50,66 +50,81 @@
     </div>
     {% endif %}
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Recent Sessions -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Sessions</h2>
-                <a href="{{ url_for('sessions') }}" class="text-sm text-claude-orange hover:underline">View all</a>
-            </div>
-            <div class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for session in recent_sessions[:5] %}
-                <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
-                   class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <div class="text-sm font-medium text-gray-900 dark:text-white">
-                                {{ session.project_name or 'Unknown Project' }}
-                            </div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                {{ session.user_count }} user / {{ session.assistant_count }} assistant messages
-                            </div>
-                        </div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">
-                            {{ session.started_at|timeago }}
-                        </div>
-                    </div>
-                </a>
-                {% else %}
-                <div class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                    No sessions yet
-                </div>
-                {% endfor %}
+    <!-- Recent Activity (Projects with Sessions) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h2>
+            <div class="flex space-x-4">
+                <a href="{{ url_for('sessions') }}" class="text-sm text-claude-orange hover:underline">All sessions</a>
+                <a href="{{ url_for('projects') }}" class="text-sm text-claude-orange hover:underline">All projects</a>
             </div>
         </div>
-
-        <!-- Projects -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Projects</h2>
-                <a href="{{ url_for('projects') }}" class="text-sm text-claude-orange hover:underline">View all</a>
-            </div>
-            <div class="divide-y divide-gray-200 dark:divide-gray-700">
-                {% for project in projects[:5] %}
-                <a href="{{ url_for('project_detail', project_id=project.id) }}"
-                   class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                    <div class="flex justify-between items-center">
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">
-                            {{ project.name or project.path }}
-                        </div>
-                        {% if project.org %}
-                        <span class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                            {{ project.org }}
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for item in recent_activity %}
+            <div class="p-4">
+                <!-- Project Header -->
+                <a href="{{ url_for('project_detail', project_id=item.project.id) }}"
+                   class="flex items-center justify-between mb-3 group">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-5 h-5 text-gray-400 group-hover:text-claude-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                        </svg>
+                        <span class="text-base font-semibold text-gray-900 dark:text-white group-hover:text-claude-orange">
+                            {{ item.project.name or item.project.path }}
+                        </span>
+                        {% if item.project.org %}
+                        <span class="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded">
+                            {{ item.project.org }}
                         </span>
                         {% endif %}
                     </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ item.last_activity|timeago }}
+                    </span>
                 </a>
-                {% else %}
-                <div class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                    No projects tracked yet
+                <!-- Sessions under this project -->
+                <div class="ml-7 space-y-2">
+                    {% for session in item.sessions %}
+                    <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
+                       class="block p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <span class="text-xs font-mono text-claude-orange">{{ session.session_id[:8] }}</span>
+                                    {% if session.git_branch %}
+                                    <span class="text-xs px-1.5 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 rounded">
+                                        {{ session.git_branch }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                {% if session.first_message %}
+                                <p class="text-sm text-gray-600 dark:text-gray-300 truncate">
+                                    {{ session.first_message }}
+                                </p>
+                                {% else %}
+                                <p class="text-sm text-gray-400 dark:text-gray-500 italic">
+                                    No preview available
+                                </p>
+                                {% endif %}
+                            </div>
+                            <div class="ml-3 flex-shrink-0 text-right">
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    {{ session.started_at|timeago }}
+                                </div>
+                                <div class="text-xs text-gray-400 dark:text-gray-500">
+                                    {{ session.user_count }}/{{ session.assistant_count }} msgs
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
                 </div>
-                {% endfor %}
             </div>
+            {% else %}
+            <div class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                No activity yet. Start using Claude Code and sessions will appear here.
+            </div>
+            {% endfor %}
         </div>
     </div>
 
