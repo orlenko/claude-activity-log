@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     },
     "watcher": {
         "claude_dir": "~/.claude",
+        "cursor_dir": "~/.cursor",
         "poll_interval": 1.0,
     },
     "summarizer": {
@@ -39,11 +40,14 @@ class DatabaseConfig:
 @dataclass
 class WatcherConfig:
     claude_dir: Path = field(default_factory=lambda: Path.home() / ".claude")
+    cursor_dir: Path = field(default_factory=lambda: Path.home() / ".cursor")
     poll_interval: float = 1.0
 
     def __post_init__(self):
         if isinstance(self.claude_dir, str):
             self.claude_dir = Path(self.claude_dir).expanduser()
+        if isinstance(self.cursor_dir, str):
+            self.cursor_dir = Path(self.cursor_dir).expanduser()
 
 
 @dataclass
@@ -81,6 +85,7 @@ class Config:
             database=DatabaseConfig(path=config_data["database"]["path"]),
             watcher=WatcherConfig(
                 claude_dir=config_data["watcher"]["claude_dir"],
+                cursor_dir=config_data["watcher"].get("cursor_dir", "~/.cursor"),
                 poll_interval=config_data["watcher"]["poll_interval"],
             ),
             summarizer=SummarizerConfig(

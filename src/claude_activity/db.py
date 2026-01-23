@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     git_branch TEXT,
     started_at TIMESTAMP,
     ended_at TIMESTAMP,
-    message_count INTEGER DEFAULT 0
+    message_count INTEGER DEFAULT 0,
+    source TEXT DEFAULT 'claude_code'  -- 'claude_code' or 'cursor'
 );
 
 -- Individual messages
@@ -138,6 +139,11 @@ class Database:
         self.config.ensure_directories()
         with self.connection() as conn:
             conn.executescript(SCHEMA)
+            # Migration: add source column if it doesn't exist
+            cursor = conn.execute("PRAGMA table_info(sessions)")
+            columns = [row['name'] for row in cursor.fetchall()]
+            if 'source' not in columns:
+                conn.execute("ALTER TABLE sessions ADD COLUMN source TEXT DEFAULT 'claude_code'")
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -194,7 +200,8 @@ class Database:
         session_id: str,
         project_id: int,
         git_branch: Optional[str] = None,
-        started_at: Optional[datetime] = None
+        started_at: Optional[datetime] = None,
+        source: str = 'claude_code'
     ) -> int:
         """Get existing session or create new one, returning session ID."""
         with self.connection() as conn:
@@ -204,8 +211,8 @@ class Database:
                 return row["id"]
 
             cursor = conn.execute(
-                "INSERT INTO sessions (session_id, project_id, git_branch, started_at) VALUES (?, ?, ?, ?)",
-                (session_id, project_id, git_branch, started_at or datetime.now())
+                "INSERT INTO sessions (session_id, project_id, git_branch, started_at, source) VALUES (?, ?, ?, ?, ?)",
+                (session_id, project_id, git_branch, started_at or datetime.now(), source)
             )
             return cursor.lastrowid
 

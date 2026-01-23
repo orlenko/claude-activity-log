@@ -18,7 +18,27 @@
 
     <!-- Session Info Card -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div>
+                <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Source</div>
+                <div class="mt-1">
+                    {% if session.source == 'cursor' %}
+                    <span class="inline-flex items-center px-2 py-1 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M13.5 2c-5.288 0-9.649 3.914-10.377 9h-3.123l4 5.917 4-5.917h-3.072c.696-3.935 4.115-6.93 8.572-6.93 4.823 0 8.741 3.918 8.741 8.743 0 4.826-3.918 8.744-8.741 8.744-2.344 0-4.471-.923-6.043-2.425l-1.414 1.414c1.941 1.866 4.58 3.011 7.457 3.011 5.928 0 10.741-4.813 10.741-10.744 0-5.93-4.813-10.813-10.741-10.813z"/>
+                        </svg>
+                        Cursor
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-1 bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 rounded text-sm font-medium">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                        Claude Code
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
             <div>
                 <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Session ID</div>
                 <div class="mt-1 text-sm font-mono text-gray-900 dark:text-white">{{ session.session_id[:16] }}...</div>

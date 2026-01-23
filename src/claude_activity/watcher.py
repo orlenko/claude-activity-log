@@ -20,6 +20,13 @@ from .parser import (
     get_project_path_from_file,
     extract_project_info
 )
+from .cursor_parser import (
+    parse_cursor_session_file,
+    get_cursor_session_id_from_path,
+    get_cursor_project_path_from_file,
+    extract_cursor_project_info,
+    is_cursor_transcript_file
+)
 
 
 logger = logging.getLogger(__name__)
@@ -74,7 +81,7 @@ class SessionFileHandler(FileSystemEventHandler):
 
         # Get or create session
         session_uuid = get_session_id_from_path(file_path)
-        session_db_id = self.db.get_or_create_session(session_uuid, project_id)
+        session_db_id = self.db.get_or_create_session(session_uuid, project_id, source='claude_code')
 
         # Get last read position
         last_pos = self.db.get_last_position(str(file_path))
@@ -121,6 +128,112 @@ class SessionFileHandler(FileSystemEventHandler):
             logger.info(f"Processed {message_count} new messages from {file_path.name}")
 
 
+class CursorSessionFileHandler(FileSystemEventHandler):
+    """Handle changes to Cursor AI transcript files."""
+
+    def __init__(self, db: Database, config: Config):
+        super().__init__()
+        self.db = db
+        self.config = config
+        self._processing = set()
+        self._processed_hashes = {}  # Track file content hashes to detect changes
+
+    def on_created(self, event):
+        if not event.is_directory and is_cursor_transcript_file(Path(event.src_path)):
+            self._process_file(Path(event.src_path))
+
+    def on_modified(self, event):
+        if not event.is_directory and is_cursor_transcript_file(Path(event.src_path)):
+            self._process_file(Path(event.src_path))
+
+    def _process_file(self, file_path: Path):
+        """Process a Cursor transcript file."""
+        path_str = str(file_path)
+
+        # Avoid concurrent processing of same file
+        if path_str in self._processing:
+            return
+
+        self._processing.add(path_str)
+        try:
+            self._do_process(file_path)
+        except Exception as e:
+            logger.error(f"Error processing Cursor file {file_path}: {e}")
+        finally:
+            self._processing.discard(path_str)
+
+    def _do_process(self, file_path: Path):
+        """Actually process the Cursor transcript file."""
+        if not file_path.exists():
+            return
+
+        path_str = str(file_path)
+
+        # Get or create project
+        project_path = get_cursor_project_path_from_file(file_path)
+        if not project_path:
+            logger.warning(f"Could not determine project path for Cursor file {file_path}")
+            return
+
+        name, org = extract_cursor_project_info(project_path)
+        project_id = self.db.get_or_create_project(project_path, name, org)
+
+        # Get or create session
+        session_uuid = get_cursor_session_id_from_path(file_path)
+        # Prefix with 'cursor-' to avoid ID collisions with Claude Code sessions
+        session_uuid = f"cursor-{session_uuid}"
+        session_db_id = self.db.get_or_create_session(session_uuid, project_id, source='cursor')
+
+        # Check if file has changed since last processing
+        # Cursor files are rewritten entirely, so we use content hash
+        try:
+            content = file_path.read_text(encoding='utf-8', errors='replace')
+            import hashlib
+            content_hash = hashlib.md5(content.encode()).hexdigest()
+
+            last_hash = self._processed_hashes.get(path_str)
+            if last_hash == content_hash:
+                return  # File hasn't changed
+
+            self._processed_hashes[path_str] = content_hash
+        except Exception as e:
+            logger.error(f"Error reading Cursor file {file_path}: {e}")
+            return
+
+        # Parse all messages (Cursor files are rewritten, not appended)
+        message_count = 0
+        first_timestamp = None
+        last_timestamp = None
+
+        for message in parse_cursor_session_file(file_path):
+            result = self.db.insert_message(
+                session_db_id=session_db_id,
+                uuid=message.uuid,
+                msg_type='message',  # Cursor doesn't have types like Claude
+                role=message.role,
+                content=message.content,
+                model=None,  # Cursor doesn't expose model in transcripts
+                timestamp=message.timestamp,
+                tokens_in=None,
+                tokens_out=None
+            )
+            if result is not None:
+                message_count += 1
+                if first_timestamp is None:
+                    first_timestamp = message.timestamp
+                last_timestamp = message.timestamp
+
+        # Update session metadata
+        if message_count > 0:
+            self.db.update_session(
+                session_uuid,
+                started_at=first_timestamp,
+                ended_at=last_timestamp,
+                message_count=message_count
+            )
+            logger.info(f"Processed {message_count} messages from Cursor file {file_path.name}")
+
+
 class Watcher:
     """File watcher daemon."""
 
@@ -136,32 +249,57 @@ class Watcher:
         Args:
             blocking: If True, run until stopped. If False, start in background.
         """
-        watch_path = self.config.watcher.claude_dir / "projects"
-
-        if not watch_path.exists():
-            logger.warning(f"Claude projects directory does not exist: {watch_path}")
-            watch_path.mkdir(parents=True, exist_ok=True)
-
-        handler = SessionFileHandler(self.db, self.config)
         self.observer = Observer()
-        self.observer.schedule(handler, str(watch_path), recursive=True)
+
+        # Watch Claude Code projects
+        claude_watch_path = self.config.watcher.claude_dir / "projects"
+        if not claude_watch_path.exists():
+            logger.warning(f"Claude projects directory does not exist: {claude_watch_path}")
+            claude_watch_path.mkdir(parents=True, exist_ok=True)
+
+        claude_handler = SessionFileHandler(self.db, self.config)
+        self.observer.schedule(claude_handler, str(claude_watch_path), recursive=True)
+        logger.info(f"Started watching Claude Code: {claude_watch_path}")
+
+        # Watch Cursor projects
+        cursor_watch_path = self.config.watcher.cursor_dir / "projects"
+        cursor_handler = None
+        if cursor_watch_path.exists():
+            cursor_handler = CursorSessionFileHandler(self.db, self.config)
+            self.observer.schedule(cursor_handler, str(cursor_watch_path), recursive=True)
+            logger.info(f"Started watching Cursor: {cursor_watch_path}")
+        else:
+            logger.info(f"Cursor directory not found, skipping: {cursor_watch_path}")
+
         self.observer.start()
 
-        logger.info(f"Started watching {watch_path}")
-
         # Process existing files on startup
-        self._process_existing_files(watch_path, handler)
+        self._process_existing_claude_files(claude_watch_path, claude_handler)
+        if cursor_handler:
+            self._process_existing_cursor_files(cursor_watch_path, cursor_handler)
 
         if blocking:
             self._run_until_stopped()
 
-    def _process_existing_files(self, watch_path: Path, handler: SessionFileHandler):
-        """Process any existing session files on startup."""
+    def _process_existing_claude_files(self, watch_path: Path, handler: SessionFileHandler):
+        """Process any existing Claude session files on startup."""
         for jsonl_file in watch_path.rglob("*.jsonl"):
             try:
                 handler._process_file(jsonl_file)
             except Exception as e:
-                logger.error(f"Error processing existing file {jsonl_file}: {e}")
+                logger.error(f"Error processing existing Claude file {jsonl_file}: {e}")
+
+    def _process_existing_cursor_files(self, watch_path: Path, handler: CursorSessionFileHandler):
+        """Process any existing Cursor transcript files on startup."""
+        for transcript_dir in watch_path.rglob("agent-transcripts"):
+            if not transcript_dir.is_dir():
+                continue
+            for transcript_file in transcript_dir.iterdir():
+                if transcript_file.suffix in ('.txt', '.json'):
+                    try:
+                        handler._process_file(transcript_file)
+                    except Exception as e:
+                        logger.error(f"Error processing existing Cursor file {transcript_file}: {e}")
 
     def _run_until_stopped(self):
         """Run the watcher until stop signal received."""

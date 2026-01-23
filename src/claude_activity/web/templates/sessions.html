@@ -34,6 +34,16 @@
                 <div class="flex-1 min-w-0">
                     <!-- First row: Session ID, Project, Time -->
                     <div class="flex items-center space-x-3 mb-1">
+                        <!-- Source indicator -->
+                        {% if session.source == 'cursor' %}
+                        <span class="text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded font-medium" title="Cursor">
+                            Cursor
+                        </span>
+                        {% else %}
+                        <span class="text-xs px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300 rounded font-medium" title="Claude Code">
+                            CC
+                        </span>
+                        {% endif %}
                         <span class="text-sm font-mono text-claude-orange">{{ session.session_id[:12] }}</span>
                         <span class="text-sm font-medium text-gray-900 dark:text-white">{{ session.project_name or 'Unknown' }}</span>
                         {% if session.git_branch %}
