@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Week of {{ week_start }} - Claude Activity Logger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header with Navigation -->
+    <div class="flex items-center justify-between">
+        <div>
+            <nav class="text-sm mb-2">
+                <a href="{{ url_for('summaries') }}" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Summaries</a>
+                <span class="text-gray-400 mx-2">/</span>
+                <span class="text-gray-900 dark:text-white">Weekly</span>
+            </nav>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+                Week of {{ week_start.strftime('%B %d') }} - {{ week_end.strftime('%B %d, %Y') }}
+            </h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <a href="{{ url_for('week_summary', offset=offset-1) }}"
+               class="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            {% if offset < 0 %}
+            <a href="{{ url_for('week_summary', offset=offset+1) }}"
+               class="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Project Filter -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form method="get" class="flex items-center space-x-4">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Filter by project:</label>
+            <select name="project_id" onchange="this.form.submit()"
+                    class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-claude-orange focus:border-claude-orange">
+                <option value="">All Projects</option>
+                {% for project in projects %}
+                <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
+                    {{ project.name or project.path }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <!-- Weekly Summary -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Weekly Summary</h2>
+            {% if not summary %}
+            <button hx-post="{{ url_for('generate_summary') }}"
+                    hx-vals='{"period_type": "weekly", "period_start": "{{ week_start }}", "project_id": "{{ selected_project_id or '' }}"}'
+                    hx-target="#summary-content"
+                    hx-indicator="#summary-loading"
+                    class="inline-flex items-center px-4 py-2 bg-claude-orange text-white rounded-md text-sm font-medium hover:bg-opacity-90">
+                <span id="summary-loading" class="htmx-indicator mr-2">
+                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </span>
+                Generate Summary
+            </button>
+            {% endif %}
+        </div>
+
+        <div id="summary-content" class="p-6">
+            {% if summary %}
+            <div class="markdown prose dark:prose-invert max-w-none">
+                {{ summary.summary|safe }}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <p>No summary available for this week.</p>
+                <p class="text-sm mt-2">Click "Generate Summary" to create one using Claude AI.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Daily Activity -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Daily Activity</h2>
+        </div>
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for day in daily_activity %}
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-medium text-gray-900 dark:text-white">
+                        {{ day.date.strftime('%A, %B %d') }}
+                    </h3>
+                    {% if not day.summary %}
+                    <button hx-post="{{ url_for('generate_summary') }}"
+                            hx-vals='{"period_type": "daily", "period_start": "{{ day.date }}", "project_id": "{{ selected_project_id or '' }}"}'
+                            hx-target="#day-{{ loop.index }}"
+                            hx-indicator="#day-loading-{{ loop.index }}"
+                            class="inline-flex items-center px-3 py-1 text-xs text-claude-orange hover:underline">
+                        <span id="day-loading-{{ loop.index }}" class="htmx-indicator mr-1">
+                            <svg class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </span>
+                        Generate
+                    </button>
+                    {% endif %}
+                </div>
+                <div id="day-{{ loop.index }}" class="text-sm text-gray-700 dark:text-gray-300">
+                    {% if day.summary %}
+                    <div class="markdown">{{ day.summary.summary }}</div>
+                    {% else %}
+                    <span class="text-gray-400 dark:text-gray-500 italic">No summary yet</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="p-6 text-center text-gray-500 dark:text-gray-400">
+                No activity recorded this week
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

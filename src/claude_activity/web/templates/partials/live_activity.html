@@ -1,0 +1,24 @@
+<div class="grid grid-cols-2 gap-4 mb-4">
+    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+        <div class="text-sm text-gray-500 dark:text-gray-400">Sessions Today</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ activity.sessions }}</div>
+    </div>
+    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+        <div class="text-sm text-gray-500 dark:text-gray-400">Messages Today</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ activity.total_messages }}</div>
+    </div>
+</div>
+
+{% if recent_sessions %}
+<div class="space-y-2">
+    {% for session in recent_sessions %}
+    <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
+       class="block p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+        <div class="flex justify-between items-center">
+            <span class="text-sm font-medium text-gray-900 dark:text-white">{{ session.project_name or 'Unknown' }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ session.started_at|timeago }}</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Claude Activity Logger{% endblock %}</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        claude: {
+                            orange: '#da7756',
+                            cream: '#f9f5f1',
+                            dark: '#1a1a1a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Custom styles -->
+    <style>
+        .markdown h2 { font-size: 1.25rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; }
+        .markdown h3 { font-size: 1.1rem; font-weight: 600; margin-top: 0.75rem; margin-bottom: 0.5rem; }
+        .markdown ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 0.5rem; }
+        .markdown li { margin-bottom: 0.25rem; }
+        .markdown p { margin-bottom: 0.5rem; }
+        .markdown strong { font-weight: 600; }
+
+        .message-user { border-left: 3px solid #3b82f6; }
+        .message-assistant { border-left: 3px solid #10b981; }
+
+        .htmx-request .htmx-indicator { display: inline-block; }
+        .htmx-indicator { display: none; }
+
+        /* Smooth transitions */
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Collapsible messages */
+        .message-content { max-height: 200px; overflow: hidden; position: relative; }
+        .message-content.expanded { max-height: none; }
+        .message-content:not(.expanded)::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: linear-gradient(transparent, white);
+        }
+        .dark .message-content:not(.expanded)::after {
+            background: linear-gradient(transparent, #1f2937);
+        }
+    </style>
+</head>
+<body class="h-full bg-gray-50 dark:bg-gray-900">
+    <div class="min-h-full">
+        <!-- Navigation -->
+        <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <!-- Logo -->
+                        <div class="flex-shrink-0 flex items-center">
+                            <a href="{{ url_for('index') }}" class="flex items-center space-x-2">
+                                <svg class="w-8 h-8 text-claude-orange" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                                </svg>
+                                <span class="text-xl font-semibold text-gray-900 dark:text-white">Claude Activity</span>
+                            </a>
+                        </div>
+
+                        <!-- Navigation Links -->
+                        <div class="hidden sm:ml-8 sm:flex sm:space-x-4">
+                            <a href="{{ url_for('index') }}"
+                               class="{% if request.endpoint == 'index' %}bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %} px-3 py-2 rounded-md text-sm font-medium">
+                                Dashboard
+                            </a>
+                            <a href="{{ url_for('today') }}"
+                               class="{% if request.endpoint == 'today' %}bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %} px-3 py-2 rounded-md text-sm font-medium">
+                                Today
+                            </a>
+                            <a href="{{ url_for('sessions') }}"
+                               class="{% if request.endpoint == 'sessions' %}bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %} px-3 py-2 rounded-md text-sm font-medium">
+                                Sessions
+                            </a>
+                            <a href="{{ url_for('projects') }}"
+                               class="{% if request.endpoint == 'projects' %}bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %} px-3 py-2 rounded-md text-sm font-medium">
+                                Projects
+                            </a>
+                            <a href="{{ url_for('summaries') }}"
+                               class="{% if request.endpoint == 'summaries' %}bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %} px-3 py-2 rounded-md text-sm font-medium">
+                                Summaries
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <!-- Search -->
+                        <form action="{{ url_for('search') }}" method="get" class="hidden sm:block">
+                            <div class="relative">
+                                <input type="text" name="q" placeholder="Search conversations..."
+                                       value="{{ request.args.get('q', '') }}"
+                                       class="w-64 pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- Daemon Status -->
+                        <div hx-get="{{ url_for('daemon_status') }}" hx-trigger="every 10s" class="flex items-center">
+                            {% if daemon_running %}
+                            <span class="flex items-center text-sm text-green-600 dark:text-green-400">
+                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                                Running
+                            </span>
+                            {% else %}
+                            <span class="flex items-center text-sm text-red-600 dark:text-red-400">
+                                <span class="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                                Stopped
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 mt-auto">
+            <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+                <p class="text-center text-sm text-gray-500 dark:text-gray-400">
+                    Claude Activity Logger &middot; Monitoring your Claude Code sessions
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Toggle message expansion
+        function toggleMessage(id) {
+            const content = document.getElementById('msg-' + id);
+            const button = document.getElementById('btn-' + id);
+            if (content.classList.contains('expanded')) {
+                content.classList.remove('expanded');
+                button.textContent = 'Show more';
+            } else {
+                content.classList.add('expanded');
+                button.textContent = 'Show less';
+            }
+        }
+
+        // Dark mode toggle (respects system preference)
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</body>
+</html>

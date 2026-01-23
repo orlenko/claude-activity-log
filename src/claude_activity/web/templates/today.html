@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Today's Activity - Claude Activity Logger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Today's Activity</h1>
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+            {{ activity.date.strftime('%A, %B %d, %Y') }}
+        </div>
+    </div>
+
+    <!-- Project Filter -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <form method="get" class="flex items-center space-x-4">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Filter by project:</label>
+            <select name="project_id" onchange="this.form.submit()"
+                    class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-claude-orange focus:border-claude-orange">
+                <option value="">All Projects</option>
+                {% for project in projects %}
+                <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
+                    {{ project.name or project.path }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Sessions</div>
+            <div class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ activity.sessions }}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">User Messages</div>
+            <div class="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-400">{{ activity.user_messages }}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Assistant Messages</div>
+            <div class="mt-2 text-3xl font-bold text-green-600 dark:text-green-400">{{ activity.assistant_messages }}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Tokens Used</div>
+            <div class="mt-2 text-xl font-bold text-gray-900 dark:text-white">
+                {{ "{:,}".format(activity.tokens_in) }} in / {{ "{:,}".format(activity.tokens_out) }} out
+            </div>
+        </div>
+    </div>
+
+    <!-- Projects Active Today -->
+    {% if activity.projects %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Projects Active Today</h2>
+        <div class="flex flex-wrap gap-2">
+            {% for project in activity.projects %}
+            <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm">
+                {{ project }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Messages -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Messages</h2>
+        </div>
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for msg in activity.messages %}
+            {% set content = msg.content or '' %}
+            {% set content_stripped = content.strip() %}
+            {% if msg.role in ['user', 'assistant'] and content_stripped and not content_stripped.startswith('[Tool:') and content_stripped != '[Tool Result]' %}
+            <div class="p-6 {% if msg.role == 'user' %}message-user{% else %}message-assistant{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium {% if msg.role == 'user' %}text-blue-600 dark:text-blue-400{% else %}text-green-600 dark:text-green-400{% endif %}">
+                        {{ msg.role|capitalize }}
+                    </span>
+                    <div class="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                        <span>{{ msg.project_name or 'Unknown' }}</span>
+                        <span>{{ msg.timestamp|localtime }}</span>
+                    </div>
+                </div>
+                <div id="msg-{{ loop.index }}" class="message-content text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ content }}</div>
+                {% if content|length > 500 %}
+                <button id="btn-{{ loop.index }}" onclick="toggleMessage({{ loop.index }})"
+                        class="mt-2 text-sm text-claude-orange hover:underline">
+                    Show more
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="p-6 text-center text-gray-500 dark:text-gray-400">
+                No messages recorded today
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

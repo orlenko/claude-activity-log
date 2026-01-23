@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name or 'Project' }} - Claude Activity Logger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <nav class="text-sm mb-2">
+            <a href="{{ url_for('projects') }}" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Projects</a>
+            <span class="text-gray-400 mx-2">/</span>
+            <span class="text-gray-900 dark:text-white">{{ project.name or 'Unnamed' }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ project.name or 'Unnamed Project' }}</h1>
+        {% if project.path %}
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ project.path }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Project Info -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Organization</div>
+                <div class="mt-1 text-gray-900 dark:text-white">{{ project.org or 'N/A' }}</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Sessions</div>
+                <div class="mt-1 text-gray-900 dark:text-white">{{ sessions|length }}</div>
+            </div>
+            <div>
+                <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Created</div>
+                <div class="mt-1 text-gray-900 dark:text-white">{{ project.created_at|localdate }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="flex space-x-4">
+        <a href="{{ url_for('today', project_id=project.id) }}"
+           class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            Today's Activity
+        </a>
+        <a href="{{ url_for('search', project_id=project.id) }}"
+           class="inline-flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            Search in Project
+        </a>
+    </div>
+
+    <!-- Sessions List -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Sessions</h2>
+        </div>
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for session in sessions %}
+            <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
+               class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <div class="text-sm font-mono text-claude-orange">{{ session.session_id[:12] }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            <span class="text-blue-600 dark:text-blue-400">{{ session.user_count }}</span> user /
+                            <span class="text-green-600 dark:text-green-400">{{ session.assistant_count }}</span> assistant messages
+                            {% if session.git_branch %}&middot; {{ session.git_branch }}{% endif %}
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ session.started_at|timeago }}
+                    </div>
+                </div>
+            </a>
+            {% else %}
+            <div class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                No sessions yet
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

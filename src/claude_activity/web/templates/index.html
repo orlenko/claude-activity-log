@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Claude Activity Logger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+            {{ now.strftime('%A, %B %d, %Y') }}
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Today's Sessions</div>
+            <div class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ today.sessions }}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Today's Messages</div>
+            <div class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ today.total_messages }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">{{ today.user_messages }} user / {{ today.assistant_messages }} assistant</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Sessions</div>
+            <div class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ stats.total_sessions }}</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Messages</div>
+            <div class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{ "{:,}".format(stats.total_messages) }}</div>
+        </div>
+    </div>
+
+    <!-- Token Usage Today -->
+    {% if today.tokens_in > 0 or today.tokens_out > 0 %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Today's Token Usage</h2>
+        <div class="flex space-x-8">
+            <div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Input Tokens</div>
+                <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ "{:,}".format(today.tokens_in) }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Output Tokens</div>
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ "{:,}".format(today.tokens_out) }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Sessions -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Sessions</h2>
+                <a href="{{ url_for('sessions') }}" class="text-sm text-claude-orange hover:underline">View all</a>
+            </div>
+            <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for session in recent_sessions[:5] %}
+                <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
+                   class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="text-sm font-medium text-gray-900 dark:text-white">
+                                {{ session.project_name or 'Unknown Project' }}
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {{ session.user_count }} user / {{ session.assistant_count }} assistant messages
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                            {{ session.started_at|timeago }}
+                        </div>
+                    </div>
+                </a>
+                {% else %}
+                <div class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    No sessions yet
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Projects -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Projects</h2>
+                <a href="{{ url_for('projects') }}" class="text-sm text-claude-orange hover:underline">View all</a>
+            </div>
+            <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for project in projects[:5] %}
+                <a href="{{ url_for('project_detail', project_id=project.id) }}"
+                   class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <div class="flex justify-between items-center">
+                        <div class="text-sm font-medium text-gray-900 dark:text-white">
+                            {{ project.name or project.path }}
+                        </div>
+                        {% if project.org %}
+                        <span class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                            {{ project.org }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </a>
+                {% else %}
+                <div class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    No projects tracked yet
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Links</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <a href="{{ url_for('week_summary') }}"
+               class="flex items-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                <svg class="w-8 h-8 text-claude-orange mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">This Week</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Weekly summary</div>
+                </div>
+            </a>
+            <a href="{{ url_for('week_summary', offset=-1) }}"
+               class="flex items-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                <svg class="w-8 h-8 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">Last Week</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Previous week</div>
+                </div>
+            </a>
+            <a href="{{ url_for('month_summary') }}"
+               class="flex items-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                <svg class="w-8 h-8 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+                <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">This Month</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Monthly summary</div>
+                </div>
+            </a>
+            <a href="{{ url_for('search') }}"
+               class="flex items-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                <svg class="w-8 h-8 text-blue-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <div>
+                    <div class="text-sm font-medium text-gray-900 dark:text-white">Search</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Find conversations</div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Search - Claude Activity Logger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Search Conversations</h1>
+    </div>
+
+    <!-- Search Form -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <form method="get" class="space-y-4">
+            <div class="flex space-x-4">
+                <div class="flex-1">
+                    <input type="text" name="q" value="{{ query }}" placeholder="Search for anything..."
+                           class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white bg-white dark:bg-gray-700 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-claude-orange focus:border-transparent"
+                           autofocus>
+                </div>
+                <button type="submit"
+                        class="px-6 py-3 bg-claude-orange text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium">
+                    Search
+                </button>
+            </div>
+            <div class="flex items-center space-x-4">
+                <label class="text-sm text-gray-600 dark:text-gray-400">Filter by project:</label>
+                <select name="project_id"
+                        class="rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm focus:ring-claude-orange focus:border-claude-orange">
+                    <option value="">All Projects</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>
+                        {{ project.name or project.path }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results -->
+    {% if query %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {% if results %}
+                Found {{ results|length }} results for "{{ query }}"
+                {% else %}
+                No results found for "{{ query }}"
+                {% endif %}
+            </h2>
+        </div>
+
+        {% if results %}
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for msg in results %}
+            {% set content = msg.content or '' %}
+            {% if content %}
+            <div class="p-6 {% if msg.role == 'user' %}message-user{% else %}message-assistant{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-4">
+                        <span class="text-sm font-medium {% if msg.role == 'user' %}text-blue-600 dark:text-blue-400{% else %}text-green-600 dark:text-green-400{% endif %}">
+                            {{ msg.role|capitalize }}
+                        </span>
+                        <a href="{{ url_for('session_detail', session_id=msg.session_uuid) }}"
+                           class="text-sm font-mono text-claude-orange hover:underline">
+                            {{ msg.session_uuid[:12] }}
+                        </a>
+                        <span class="text-sm text-gray-500 dark:text-gray-400">{{ msg.project_name or 'Unknown' }}</span>
+                    </div>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ msg.timestamp|localtime }}</span>
+                </div>
+
+                {% set query_lower = query|lower %}
+                {% set content_lower = content|lower %}
+                {% set match_pos = content_lower.find(query_lower) %}
+                {% set snippet_start = [0, match_pos - 100]|max %}
+                {% set snippet_end = [content|length, match_pos + query|length + 200]|min %}
+                {% set snippet = content[snippet_start:snippet_end] %}
+
+                <div class="text-sm text-gray-700 dark:text-gray-300">
+                    {% if snippet_start > 0 %}...{% endif %}{{ snippet }}{% if snippet_end < content|length %}...{% endif %}
+                </div>
+
+                <a href="{{ url_for('session_detail', session_id=msg.session_uuid) }}"
+                   class="inline-flex items-center mt-3 text-sm text-claude-orange hover:underline">
+                    View full conversation
+                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-gray-500 dark:text-gray-400">
+            <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <p>No conversations match your search.</p>
+            <p class="text-sm mt-2">Try different keywords or remove the project filter.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
+        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Search your conversations</h3>
+        <p class="text-gray-500 dark:text-gray-400">
+            Enter keywords to find specific discussions, code snippets, or topics from your Claude Code sessions.
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

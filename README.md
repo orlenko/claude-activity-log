@@ -8,6 +8,7 @@ A background daemon that monitors all your Claude Code sessions, logs conversati
 - **SQLite Storage**: Efficiently stores messages with full metadata (timestamps, tokens, git branch, etc.)
 - **AI Summaries**: Generate daily, weekly, and monthly summaries using Claude API (Haiku model for cost efficiency)
 - **Rich CLI**: Beautiful terminal output with colored tables and formatted panels
+- **Web UI**: Modern browser-based dashboard with full conversation viewer, search, and summary generation
 - **Search**: Full-text search across all your conversations
 - **Incremental Processing**: Only processes new messages, minimizing resource usage
 
@@ -109,6 +110,29 @@ claude-activity projects
 ```bash
 claude-activity stop
 ```
+
+### Web UI
+
+Launch a beautiful browser-based dashboard:
+
+```bash
+# Start web server (default: http://127.0.0.1:5000)
+claude-activity web
+
+# Custom host and port
+claude-activity web --host 0.0.0.0 --port 8080
+
+# Debug mode (auto-reload on code changes)
+claude-activity web --debug
+```
+
+The web UI provides:
+- **Dashboard**: Overview of today's activity, recent sessions, and quick links
+- **Sessions Browser**: List and filter sessions by project, with full conversation viewer
+- **Project Explorer**: Browse all tracked projects and their sessions
+- **Search**: Search across all conversations with highlighted results
+- **Summaries**: View and generate daily/weekly/monthly AI summaries with one click
+- **Live Status**: Real-time daemon status indicator
 
 ## Auto-Start on Login (macOS)
 

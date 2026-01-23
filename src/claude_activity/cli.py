@@ -491,5 +491,26 @@ def search(query: str, repo: Optional[str], limit: int):
     console.print("[dim]Tip: View full session with: claude-activity session <session-id>[/dim]")
 
 
+# ============= Web UI commands =============
+
+@cli.command()
+@click.option('--host', '-h', default='127.0.0.1', help='Host to bind to')
+@click.option('--port', '-p', default=5000, help='Port to bind to')
+@click.option('--debug', '-d', is_flag=True, help='Run in debug mode')
+def web(host: str, port: int, debug: bool):
+    """Start the web UI server."""
+    try:
+        from .web.app import create_app
+    except ImportError as e:
+        console.print(f"[red]Error importing web module: {e}[/red]")
+        console.print("[dim]Make sure Flask is installed: pip install flask[/dim]")
+        return
+
+    app = create_app()
+    console.print(f"[green]Starting web UI at http://{host}:{port}[/green]")
+    console.print("[dim]Press Ctrl+C to stop[/dim]")
+    app.run(host=host, port=port, debug=debug)
+
+
 if __name__ == "__main__":
     cli()

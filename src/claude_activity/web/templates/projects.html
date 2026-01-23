@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Projects - Claude Activity Logger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Projects</h1>
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+            {{ projects|length }} tracked projects
+        </div>
+    </div>
+
+    <!-- Projects Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for project in projects %}
+        <a href="{{ url_for('project_detail', project_id=project.id) }}"
+           class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-start justify-between">
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                        {{ project.name or 'Unnamed Project' }}
+                    </h3>
+                    {% if project.path %}
+                    <p class="text-sm text-gray-500 dark:text-gray-400 truncate mt-1" title="{{ project.path }}">
+                        {{ project.path }}
+                    </p>
+                    {% endif %}
+                </div>
+                {% if project.org %}
+                <span class="ml-2 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs">
+                    {{ project.org }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="mt-4 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+                {{ project.session_count }} sessions
+            </div>
+        </a>
+        {% else %}
+        <div class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
+            No projects tracked yet. Start using Claude Code and the watcher will detect your projects automatically.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
