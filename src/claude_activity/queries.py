@@ -134,14 +134,28 @@ class QueryHelper:
         since: Optional[datetime] = None,
         limit: int = 20
     ) -> list[dict]:
-        """Get recent sessions with message counts."""
+        """Get recent sessions with message counts and first message snippet."""
         sessions = self.db.list_sessions(project_id=project_id, since=since, limit=limit)
 
         # Enrich with message data
         for session in sessions:
             messages = self.db.get_messages_for_session(session['id'])
-            session['user_count'] = len([m for m in messages if m.get('role') == 'user'])
+            user_messages = [m for m in messages if m.get('role') == 'user']
+            session['user_count'] = len(user_messages)
             session['assistant_count'] = len([m for m in messages if m.get('role') == 'assistant'])
+
+            # Get first user message as snippet
+            session['first_message'] = None
+            for msg in user_messages:
+                content = msg.get('content') or ''
+                content = content.strip()
+                if content and not content.startswith('[Tool:'):
+                    # Get first line or first 150 chars
+                    first_line = content.split('\n')[0]
+                    if len(first_line) > 150:
+                        first_line = first_line[:150] + '...'
+                    session['first_message'] = first_line
+                    break
 
         return sessions
 

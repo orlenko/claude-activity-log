@@ -26,59 +26,50 @@
     </div>
 
     <!-- Sessions List -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead class="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Session ID
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Project
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Started
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Messages
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Branch
-                    </th>
-                </tr>
-            </thead>
-            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {% for session in sessions %}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                    onclick="window.location='{{ url_for('session_detail', session_id=session.session_id) }}'">
-                    <td class="px-6 py-4 whitespace-nowrap">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow divide-y divide-gray-200 dark:divide-gray-700">
+        {% for session in sessions %}
+        <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
+           class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            <div class="flex items-start justify-between">
+                <div class="flex-1 min-w-0">
+                    <!-- First row: Session ID, Project, Time -->
+                    <div class="flex items-center space-x-3 mb-1">
                         <span class="text-sm font-mono text-claude-orange">{{ session.session_id[:12] }}</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="text-sm text-gray-900 dark:text-white">{{ session.project_name or 'Unknown' }}</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="text-sm text-gray-500 dark:text-gray-400">{{ session.started_at|localtime }}</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="text-sm text-gray-500 dark:text-gray-400">
-                            <span class="text-blue-600 dark:text-blue-400">{{ session.user_count }}</span> user /
-                            <span class="text-green-600 dark:text-green-400">{{ session.assistant_count }}</span> assistant
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ session.project_name or 'Unknown' }}</span>
+                        {% if session.git_branch %}
+                        <span class="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                            {{ session.git_branch }}
                         </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="text-sm text-gray-500 dark:text-gray-400">{{ session.git_branch or '-' }}</span>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="5" class="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
-                        No sessions found
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        {% endif %}
+                    </div>
+                    <!-- Second row: First message snippet -->
+                    {% if session.first_message %}
+                    <p class="text-sm text-gray-600 dark:text-gray-300 truncate">
+                        {{ session.first_message }}
+                    </p>
+                    {% else %}
+                    <p class="text-sm text-gray-400 dark:text-gray-500 italic">
+                        No message preview available
+                    </p>
+                    {% endif %}
+                </div>
+                <!-- Right side: Time and message counts -->
+                <div class="ml-4 flex-shrink-0 text-right">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ session.started_at|timeago }}
+                    </div>
+                    <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        <span class="text-blue-600 dark:text-blue-400">{{ session.user_count }}</span> /
+                        <span class="text-green-600 dark:text-green-400">{{ session.assistant_count }}</span> msgs
+                    </div>
+                </div>
+            </div>
+        </a>
+        {% else %}
+        <div class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+            No sessions found
+        </div>
+        {% endfor %}
     </div>
 
     <!-- Pagination -->
