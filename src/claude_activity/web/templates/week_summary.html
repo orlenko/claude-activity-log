@@ -73,8 +73,8 @@
 
         <div id="summary-content" class="p-6">
             {% if summary %}
-            <div class="markdown prose dark:prose-invert max-w-none">
-                {{ summary.summary|safe }}
+            <div class="summary-content">
+                {{ summary.summary|markdown }}
             </div>
             {% else %}
             <div class="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -116,9 +116,9 @@
                     </button>
                     {% endif %}
                 </div>
-                <div id="day-{{ loop.index }}" class="text-sm text-gray-700 dark:text-gray-300">
+                <div id="day-{{ loop.index }}" class="summary-content text-sm">
                     {% if day.summary %}
-                    <div class="markdown">{{ day.summary.summary }}</div>
+                    {{ day.summary.summary|markdown }}
                     {% else %}
                     <span class="text-gray-400 dark:text-gray-500 italic">No summary yet</span>
                     {% endif %}

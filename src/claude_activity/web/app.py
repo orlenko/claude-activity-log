@@ -1,8 +1,10 @@
 """Flask application for Claude Activity Logger web UI."""
 
 import os
+import re
 from datetime import datetime, date, timedelta
 from typing import Optional
+from markupsafe import Markup
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 
@@ -77,6 +79,63 @@ def create_app(config=None):
             else:
                 return "just now"
         return str(dt)
+
+    @app.template_filter('markdown')
+    def markdown_filter(text):
+        """Convert markdown to HTML."""
+        if not text:
+            return ''
+
+        # Escape HTML first
+        text = str(text)
+
+        # Convert markdown to HTML (simple implementation)
+        lines = text.split('\n')
+        html_lines = []
+        in_list = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Headers
+            if stripped.startswith('## '):
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
+                html_lines.append(f'<h2 class="text-lg font-semibold mt-4 mb-2 text-gray-900 dark:text-white">{stripped[3:]}</h2>')
+            elif stripped.startswith('### '):
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
+                html_lines.append(f'<h3 class="text-base font-semibold mt-3 mb-2 text-gray-900 dark:text-white">{stripped[4:]}</h3>')
+            # Bullet points
+            elif stripped.startswith('- '):
+                if not in_list:
+                    html_lines.append('<ul class="list-disc list-inside space-y-1 mb-3 text-gray-700 dark:text-gray-300">')
+                    in_list = True
+                # Handle bold text in list items
+                item_text = stripped[2:]
+                item_text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', item_text)
+                html_lines.append(f'<li>{item_text}</li>')
+            # Empty line
+            elif not stripped:
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
+                html_lines.append('<br>')
+            # Regular paragraph
+            else:
+                if in_list:
+                    html_lines.append('</ul>')
+                    in_list = False
+                # Handle bold text
+                para_text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
+                html_lines.append(f'<p class="mb-2 text-gray-700 dark:text-gray-300">{para_text}</p>')
+
+        if in_list:
+            html_lines.append('</ul>')
+
+        return Markup('\n'.join(html_lines))
 
     # ============= Main Routes =============
 

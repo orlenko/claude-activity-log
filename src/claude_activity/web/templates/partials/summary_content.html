@@ -8,8 +8,8 @@
     </div>
 </div>
 {% elif summary %}
-<div class="markdown prose dark:prose-invert max-w-none fade-in">
-    {{ summary.summary|safe }}
+<div class="summary-content fade-in">
+    {{ summary.summary|markdown }}
 </div>
 {% elif message %}
 <div class="text-center py-4 text-gray-500 dark:text-gray-400">

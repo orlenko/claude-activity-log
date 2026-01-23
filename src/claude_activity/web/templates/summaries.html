@@ -98,8 +98,8 @@
                         {{ summary.created_at|localtime }}
                     </span>
                 </div>
-                <div class="markdown text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
-                    {{ summary.summary[:300] }}{% if summary.summary|length > 300 %}...{% endif %}
+                <div class="summary-content text-sm line-clamp-3">
+                    {{ summary.summary[:300]|markdown }}{% if summary.summary|length > 300 %}...{% endif %}
                 </div>
             </div>
             {% endfor %}
