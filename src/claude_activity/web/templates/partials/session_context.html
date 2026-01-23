@@ -1,0 +1,51 @@
+{% if error %}
+<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+    <div class="flex items-center">
+        <svg class="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span class="text-red-700 dark:text-red-300">Error: {{ error }}</span>
+    </div>
+</div>
+{% elif context %}
+<div class="space-y-4 fade-in">
+    <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Session Context Summary</h3>
+        <button onclick="copyContext()"
+                class="inline-flex items-center px-3 py-2 bg-claude-orange text-white rounded-md text-sm font-medium hover:bg-opacity-90">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            Copy to Clipboard
+        </button>
+    </div>
+    <p class="text-sm text-gray-600 dark:text-gray-400">
+        Paste this into a new Claude session to restore context and continue work.
+    </p>
+    <div id="context-content" class="summary-content bg-gray-50 dark:bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto">
+        {{ context|markdown }}
+    </div>
+    <textarea id="context-raw" class="hidden">{{ context }}</textarea>
+</div>
+<script>
+function copyContext() {
+    const text = document.getElementById('context-raw').value;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Copied!';
+        btn.classList.add('bg-green-600');
+        btn.classList.remove('bg-claude-orange');
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('bg-green-600');
+            btn.classList.add('bg-claude-orange');
+        }, 2000);
+    });
+}
+</script>
+{% else %}
+<div class="text-center py-4 text-gray-500 dark:text-gray-400">
+    Generating context summary...
+</div>
+{% endif %}

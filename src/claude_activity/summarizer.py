@@ -85,6 +85,48 @@ Format your response as:
 Be comprehensive but focus on the most significant activities and patterns.
 """
 
+SESSION_CONTEXT_PROMPT = """Analyze this Claude Code conversation and create a detailed context summary that can be used to resume this work in a new session.
+
+**Project:** {project_name}
+**Branch:** {git_branch}
+**Date:** {session_date}
+
+## Conversation:
+{conversation}
+
+---
+
+Create a comprehensive context summary that captures everything needed to continue this work. Include:
+
+## Objective
+What was the user trying to accomplish? What was the high-level goal?
+
+## Background & Motivation
+Why was this work being done? What problem was being solved? Any important context about the codebase or requirements.
+
+## Key Decisions Made
+Important technical or design decisions that were made during the conversation, and the reasoning behind them.
+
+## What Was Implemented
+Specific changes that were made - files modified, features added, bugs fixed. Be specific about what code was written or changed.
+
+## Important Considerations
+Any constraints, edge cases, gotchas, or important details that came up during the work that should be remembered.
+
+## Current State
+Where did the work end up? What's working, what's not? Any known issues?
+
+## Next Steps / Open Items
+What still needs to be done? Any unfinished work or follow-up tasks mentioned?
+
+## Acceptance Criteria
+If mentioned, what are the criteria for this work to be considered complete?
+
+---
+
+Write this summary as if briefing another developer (or Claude) who needs to pick up this work. Be detailed enough to restore full context, but focus on what matters for continuing the work. Aim for 1-2 pages of content.
+"""
+
 
 class Summarizer:
     """Generate summaries of Claude activity using the Claude API."""
@@ -383,3 +425,104 @@ class Summarizer:
                     print(f"Error summarizing week of {week_monday}: {e}")
 
         return results
+
+    def generate_session_context(self, session_id: str) -> Optional[str]:
+        """Generate a detailed context summary for a session that can be used to resume work.
+
+        This creates a comprehensive summary suitable for pasting into a new Claude session
+        to restore context and continue work on a feature/branch.
+
+        Args:
+            session_id: The session UUID (can be partial prefix)
+
+        Returns:
+            The context summary, or None if session not found
+        """
+        # Find session by prefix
+        with self.db.connection() as conn:
+            cursor = conn.execute(
+                "SELECT id, session_id, project_id, git_branch, started_at FROM sessions WHERE session_id LIKE ?",
+                (f"{session_id}%",)
+            )
+            session = cursor.fetchone()
+
+        if not session:
+            return None
+
+        session = dict(session)
+        session_db_id = session['id']
+
+        # Get project info
+        project_name = "Unknown"
+        if session.get('project_id'):
+            project = self.db.get_project(session['project_id'])
+            if project:
+                project_name = project.get('name') or project.get('path') or "Unknown"
+
+        # Get all messages for this session
+        messages = self.db.get_messages_for_session(session_db_id)
+
+        # Filter to user/assistant messages only, skip tool-only messages
+        filtered_messages = []
+        for msg in messages:
+            role = msg.get('role')
+            content = msg.get('content') or ''
+
+            if role not in ('user', 'assistant'):
+                continue
+
+            content_stripped = content.strip()
+            if not content_stripped:
+                continue
+            if content_stripped.startswith('[Tool:') or content_stripped == '[Tool Result]':
+                continue
+
+            filtered_messages.append(msg)
+
+        if not filtered_messages:
+            return None
+
+        # Format conversation for the prompt
+        # Include both user and assistant messages for full context
+        conversation_parts = []
+        for msg in filtered_messages:
+            role = msg.get('role', 'unknown')
+            content = msg.get('content') or ''
+
+            # Truncate very long messages but keep more than daily summaries
+            if len(content) > 2000:
+                content = content[:2000] + "\n... [truncated]"
+
+            conversation_parts.append(f"**{role.upper()}:** {content}")
+
+        conversation = "\n\n".join(conversation_parts)
+
+        # Limit total conversation size
+        if len(conversation) > 100000:
+            conversation = conversation[:100000] + "\n\n... [conversation truncated due to length]"
+
+        # Get session date
+        session_date = session.get('started_at')
+        if isinstance(session_date, datetime):
+            session_date = session_date.strftime("%Y-%m-%d")
+        else:
+            session_date = str(session_date) if session_date else "Unknown"
+
+        # Generate the context summary
+        prompt = SESSION_CONTEXT_PROMPT.format(
+            project_name=project_name,
+            git_branch=session.get('git_branch') or "Unknown",
+            session_date=session_date,
+            conversation=conversation
+        )
+
+        # Use a larger model for better context extraction if available
+        response = self.client.messages.create(
+            model="claude-sonnet-4-20250514",  # Use Sonnet for better quality
+            max_tokens=4000,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        return response.content[0].text

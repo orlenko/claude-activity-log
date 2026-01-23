@@ -464,6 +464,68 @@ def create_app(config=None):
                              activity=activity,
                              recent_sessions=recent_sessions)
 
+    @app.route('/api/session-context/<session_id>', methods=['POST'])
+    def generate_session_context(session_id):
+        """Generate a detailed context summary for a session."""
+        try:
+            db = Database(config)
+            summarizer = Summarizer(config, db)
+
+            # Find session by prefix
+            with db.connection() as conn:
+                cursor = conn.execute(
+                    "SELECT session_id FROM sessions WHERE session_id LIKE ?",
+                    (f"{session_id}%",)
+                )
+                row = cursor.fetchone()
+                if row:
+                    session_id = row['session_id']
+                else:
+                    return render_template('partials/session_context.html',
+                                         error="Session not found")
+
+            context = summarizer.generate_session_context(session_id)
+
+            if context:
+                return render_template('partials/session_context.html',
+                                     context=context)
+            else:
+                return render_template('partials/session_context.html',
+                                     error="Could not generate context (session may be empty)")
+
+        except Exception as e:
+            return render_template('partials/session_context.html',
+                                 error=str(e))
+
+    @app.route('/api/session-context/<session_id>/raw', methods=['GET'])
+    def get_session_context_raw(session_id):
+        """Get raw session context for copying."""
+        try:
+            db = Database(config)
+            summarizer = Summarizer(config, db)
+
+            # Find session by prefix
+            with db.connection() as conn:
+                cursor = conn.execute(
+                    "SELECT session_id FROM sessions WHERE session_id LIKE ?",
+                    (f"{session_id}%",)
+                )
+                row = cursor.fetchone()
+                if row:
+                    session_id = row['session_id']
+                else:
+                    return jsonify({'error': 'Session not found'}), 404
+
+            context = summarizer.generate_session_context(session_id)
+
+            if context:
+                return jsonify({'context': context})
+            else:
+                return jsonify({'error': 'Could not generate context'}), 404
+
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     return app
 
 

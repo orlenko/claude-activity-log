@@ -408,6 +408,69 @@ def summarize(force: bool, repo: Optional[str]):
         raise
 
 
+@cli.command()
+@click.argument('session_id')
+@click.option('--copy', '-c', is_flag=True, help='Copy to clipboard (macOS)')
+@click.option('--output', '-o', help='Write to file')
+def context(session_id: str, copy: bool, output: Optional[str]):
+    """Generate a detailed context summary for a session.
+
+    This creates a comprehensive summary of a Claude session that can be
+    pasted into a new Claude session to restore context and continue work.
+
+    Useful for resuming work on a feature/branch after losing context.
+    """
+    config = get_config()
+    db = Database(config)
+
+    # Find session by prefix
+    with db.connection() as conn:
+        cursor = conn.execute(
+            "SELECT session_id FROM sessions WHERE session_id LIKE ?",
+            (f"{session_id}%",)
+        )
+        row = cursor.fetchone()
+        if row:
+            session_id = row['session_id']
+        else:
+            console.print(f"[red]Session not found: {session_id}[/red]")
+            return
+
+    console.print(f"[dim]Generating context summary for session {session_id[:12]}...[/dim]")
+    console.print("[dim]This may take a moment...[/dim]")
+
+    try:
+        summarizer = Summarizer(config, db)
+        context_summary = summarizer.generate_session_context(session_id)
+
+        if not context_summary:
+            console.print("[yellow]No context could be generated (session may be empty)[/yellow]")
+            return
+
+        # Output options
+        if output:
+            with open(output, 'w') as f:
+                f.write(context_summary)
+            console.print(f"[green]Context written to {output}[/green]")
+        elif copy:
+            # Use pbcopy on macOS
+            try:
+                process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+                process.communicate(context_summary.encode('utf-8'))
+                console.print("[green]Context copied to clipboard![/green]")
+                console.print("[dim]Paste into a new Claude session to restore context.[/dim]")
+            except FileNotFoundError:
+                console.print("[yellow]pbcopy not found. Printing to stdout instead.[/yellow]")
+                console.print(Panel(Markdown(context_summary), title="Session Context"))
+        else:
+            console.print(Panel(Markdown(context_summary), title="Session Context"))
+            console.print("\n[dim]Tip: Use --copy to copy to clipboard, or --output FILE to save to a file[/dim]")
+
+    except Exception as e:
+        console.print(f"[red]Error generating context: {e}[/red]")
+        raise
+
+
 # ============= Project commands =============
 
 @cli.command()
