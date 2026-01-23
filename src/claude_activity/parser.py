@@ -22,6 +22,8 @@ class ParsedMessage:
     timestamp: datetime
     tokens_in: Optional[int] = None
     tokens_out: Optional[int] = None
+    cwd: Optional[str] = None  # Working directory from message
+    git_branch: Optional[str] = None  # Git branch from message
     raw_data: Optional[dict] = None
 
 
@@ -288,6 +290,10 @@ def parse_message(line: str) -> Optional[ParsedMessage]:
         tokens_in = usage.get('input_tokens')
         tokens_out = usage.get('output_tokens')
 
+    # Extract cwd and git_branch (available in most messages)
+    cwd = data.get('cwd')
+    git_branch = data.get('gitBranch')
+
     return ParsedMessage(
         uuid=uuid,
         type=msg_type,
@@ -297,6 +303,8 @@ def parse_message(line: str) -> Optional[ParsedMessage]:
         timestamp=timestamp,
         tokens_in=tokens_in,
         tokens_out=tokens_out,
+        cwd=cwd,
+        git_branch=git_branch,
         raw_data=data
     )
 

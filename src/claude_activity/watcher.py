@@ -70,29 +70,48 @@ class SessionFileHandler(FileSystemEventHandler):
         if not file_path.exists():
             return
 
-        # Get or create project
-        project_path = get_project_path_from_file(file_path)
-        if not project_path:
-            logger.warning(f"Could not determine project path for {file_path}")
-            return
+        # Get last read position
+        last_pos = self.db.get_last_position(str(file_path))
 
+        # Parse messages and collect them
+        messages_to_insert = []
+        project_path = None
+        git_branch = None
+        final_pos = last_pos
+
+        for message, end_pos in parse_session_file(file_path, last_pos):
+            messages_to_insert.append(message)
+            # Extract project path from first message that has cwd
+            if project_path is None and message.cwd:
+                project_path = message.cwd
+            # Extract git branch from first message that has it
+            if git_branch is None and message.git_branch:
+                git_branch = message.git_branch
+            final_pos = end_pos
+
+        # If no cwd found in messages, fall back to directory name decoding
+        if not project_path:
+            project_path = get_project_path_from_file(file_path)
+            if not project_path:
+                logger.warning(f"Could not determine project path for {file_path}")
+                return
+
+        # Get or create project
         name, org = extract_project_info(project_path)
         project_id = self.db.get_or_create_project(project_path, name, org)
 
         # Get or create session
         session_uuid = get_session_id_from_path(file_path)
-        session_db_id = self.db.get_or_create_session(session_uuid, project_id, source='claude_code')
+        session_db_id = self.db.get_or_create_session(
+            session_uuid, project_id, git_branch=git_branch, source='claude_code'
+        )
 
-        # Get last read position
-        last_pos = self.db.get_last_position(str(file_path))
-
-        # Parse new messages
+        # Insert messages
         message_count = 0
         first_timestamp = None
         last_timestamp = None
-        final_pos = last_pos
 
-        for message, end_pos in parse_session_file(file_path, last_pos):
+        for message in messages_to_insert:
             result = self.db.insert_message(
                 session_db_id=session_db_id,
                 uuid=message.uuid,
@@ -111,7 +130,6 @@ class SessionFileHandler(FileSystemEventHandler):
                     if first_timestamp is None:
                         first_timestamp = message.timestamp
                     last_timestamp = message.timestamp
-            final_pos = end_pos
 
         # Update position tracker
         if final_pos > last_pos:
