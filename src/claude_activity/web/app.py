@@ -1,4 +1,7 @@
-"""Flask application for Claude Activity Logger web UI."""
+"""Flask application for Claude Activity Logger web UI.
+
+For timestamp handling conventions, see timestamps.py.
+"""
 
 import os
 import re
@@ -10,9 +13,10 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for
 
 from ..config import get_config
 from ..db import Database
-from ..queries import QueryHelper, get_week_range, get_month_range, utc_to_local
+from ..queries import QueryHelper, get_week_range, get_month_range
 from ..summarizer import Summarizer
 from ..watcher import read_pid_file, is_process_running
+from ..timestamps import utc_to_local, utc_now, timeago as ts_timeago
 
 
 def create_app(config=None):
@@ -34,15 +38,20 @@ def create_app(config=None):
         """Inject global variables into all templates."""
         pid = read_pid_file()
         daemon_running = pid and is_process_running(pid)
+        # Use local time for display in templates
         return {
             'daemon_running': daemon_running,
             'daemon_pid': pid if daemon_running else None,
-            'now': datetime.now(),
+            'now': utc_to_local(utc_now()),  # Current local time for display
         }
 
     @app.template_filter('localtime')
     def localtime_filter(dt):
-        """Convert UTC datetime to local time."""
+        """Convert UTC datetime to local time string.
+
+        All stored timestamps are in UTC. This filter converts for display.
+        See timestamps.py for the timestamp convention.
+        """
         if dt is None:
             return ''
         if isinstance(dt, datetime):
@@ -51,7 +60,11 @@ def create_app(config=None):
 
     @app.template_filter('localdate')
     def localdate_filter(dt):
-        """Convert UTC datetime to local date."""
+        """Convert UTC datetime to local date string.
+
+        All stored timestamps are in UTC. This filter converts for display.
+        See timestamps.py for the timestamp convention.
+        """
         if dt is None:
             return ''
         if isinstance(dt, datetime):
@@ -60,24 +73,15 @@ def create_app(config=None):
 
     @app.template_filter('timeago')
     def timeago_filter(dt):
-        """Convert datetime to relative time string."""
+        """Convert UTC datetime to relative time string.
+
+        All stored timestamps are in UTC. This filter handles the conversion.
+        See timestamps.py for the timestamp convention.
+        """
         if dt is None:
             return ''
         if isinstance(dt, datetime):
-            now = datetime.now()
-            dt_local = utc_to_local(dt)
-            diff = now - dt_local
-
-            if diff.days > 30:
-                return dt_local.strftime('%b %d, %Y')
-            elif diff.days > 0:
-                return f"{diff.days}d ago"
-            elif diff.seconds > 3600:
-                return f"{diff.seconds // 3600}h ago"
-            elif diff.seconds > 60:
-                return f"{diff.seconds // 60}m ago"
-            else:
-                return "just now"
+            return ts_timeago(dt)
         return str(dt)
 
     @app.template_filter('markdown')

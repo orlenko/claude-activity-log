@@ -2,20 +2,23 @@
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Optional, Iterator, Any
 
 from .config import Config, get_config
+from .timestamps import utc_now, to_utc
 
 
 # Custom adapters and converters for datetime handling (Python 3.12+ compatible)
 def adapt_datetime(val: datetime) -> str:
     """Convert datetime to ISO format string for storage.
 
-    Uses space separator to match SQLite's default timestamp format
-    and ensure consistent string comparisons.
+    All timestamps are stored in UTC. See timestamps.py for convention.
+    If the datetime has timezone info, it's converted to UTC first.
     """
+    # Convert to UTC (handles both timezone-aware and naive)
+    val = to_utc(val)
     return val.strftime('%Y-%m-%d %H:%M:%S.%f') if val.microsecond else val.strftime('%Y-%m-%d %H:%M:%S')
 
 
@@ -25,7 +28,11 @@ def adapt_date(val: date) -> str:
 
 
 def convert_datetime(val: bytes) -> datetime:
-    """Convert stored timestamp back to datetime."""
+    """Convert stored timestamp back to datetime.
+
+    All timestamps are stored in UTC (without timezone info).
+    See timestamps.py for the timestamp convention.
+    """
     try:
         text = val.decode('utf-8')
         # Handle various formats
@@ -40,10 +47,10 @@ def convert_datetime(val: bytes) -> datetime:
                 return datetime.strptime(text, fmt)
             except ValueError:
                 continue
-        # Fallback: just return current time
-        return datetime.now()
+        # Fallback: return current UTC time
+        return utc_now()
     except Exception:
-        return datetime.now()
+        return utc_now()
 
 
 def convert_date(val: bytes) -> date:
@@ -212,7 +219,7 @@ class Database:
 
             cursor = conn.execute(
                 "INSERT INTO sessions (session_id, project_id, git_branch, started_at, source) VALUES (?, ?, ?, ?, ?)",
-                (session_id, project_id, git_branch, started_at or datetime.now(), source)
+                (session_id, project_id, git_branch, started_at, source)
             )
             return cursor.lastrowid
 
@@ -366,7 +373,7 @@ class Database:
                    ON CONFLICT(file_path) DO UPDATE SET
                    last_position = excluded.last_position,
                    last_modified = excluded.last_modified""",
-                (file_path, position, modified or datetime.now())
+                (file_path, position, modified or utc_now())
             )
 
     # Summary operations

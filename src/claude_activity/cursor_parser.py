@@ -1,4 +1,7 @@
-"""Parser for Cursor AI session transcripts."""
+"""Parser for Cursor AI session transcripts.
+
+For timestamp handling conventions, see timestamps.py.
+"""
 
 import json
 import re
@@ -8,6 +11,8 @@ from pathlib import Path
 from typing import Optional, Iterator, Any
 import hashlib
 import os
+
+from .timestamps import utc_now, parse_timestamp
 
 
 @dataclass
@@ -194,8 +199,9 @@ def parse_cursor_session_file(file_path: Path) -> Iterator[CursorMessage]:
     if not file_path.exists():
         return
 
-    # Get file modification time as timestamp
-    file_mtime = datetime.fromtimestamp(os.path.getmtime(file_path))
+    # Get file modification time as timestamp (in UTC)
+    # parse_timestamp handles unix timestamps and converts to UTC
+    file_mtime = parse_timestamp(os.path.getmtime(file_path))
 
     content = file_path.read_text(encoding='utf-8', errors='replace')
 

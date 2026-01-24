@@ -1,39 +1,27 @@
-"""Query helpers for CLI commands."""
+"""Query helpers for CLI commands.
 
-from datetime import datetime, date, timedelta, timezone
+For timestamp handling conventions, see timestamps.py.
+"""
+
+from datetime import datetime, date, timedelta
 from typing import Optional
 
 from .db import Database
 from .config import Config, get_config
-
-
-def get_local_timezone_offset() -> timedelta:
-    """Get the local timezone offset from UTC."""
-    local_now = datetime.now()
-    utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
-    return local_now - utc_now
-
-
-def local_to_utc(dt: datetime) -> datetime:
-    """Convert a naive local datetime to UTC for database queries."""
-    offset = get_local_timezone_offset()
-    return dt - offset
-
-
-def utc_to_local(dt: datetime) -> datetime:
-    """Convert a UTC datetime to local time for display."""
-    offset = get_local_timezone_offset()
-    return dt + offset
+from .timestamps import (
+    utc_to_local,
+    local_to_utc,
+    get_today_utc_range,
+    get_local_offset,
+)
 
 
 def get_today_range() -> tuple[datetime, datetime]:
-    """Get datetime range for today in UTC (for querying UTC-stored timestamps)."""
-    today = date.today()
-    # Local midnight today and tomorrow
-    local_start = datetime.combine(today, datetime.min.time())
-    local_end = datetime.combine(today + timedelta(days=1), datetime.min.time())
-    # Convert to UTC for database comparison
-    return local_to_utc(local_start), local_to_utc(local_end)
+    """Get datetime range for today in UTC (for querying UTC-stored timestamps).
+
+    Delegates to timestamps.get_today_utc_range().
+    """
+    return get_today_utc_range()
 
 
 def get_week_range(week_offset: int = 0) -> tuple[date, date]:

@@ -1,10 +1,15 @@
-"""JSONL conversation parser for Claude Code sessions."""
+"""JSONL conversation parser for Claude Code sessions.
+
+For timestamp handling conventions, see timestamps.py.
+"""
 
 import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Iterator, Any
+
+from .timestamps import parse_timestamp as ts_parse_timestamp, utc_now
 
 
 # Cache for the common prefix (computed once per run)
@@ -193,34 +198,12 @@ def extract_text_content(content: Any) -> Optional[str]:
 
 
 def parse_timestamp(ts: Any) -> datetime:
-    """Parse timestamp from various formats."""
-    if isinstance(ts, datetime):
-        return ts
+    """Parse timestamp from various formats.
 
-    if isinstance(ts, (int, float)):
-        # Unix timestamp (seconds or milliseconds)
-        if ts > 1e12:  # Milliseconds
-            return datetime.fromtimestamp(ts / 1000)
-        return datetime.fromtimestamp(ts)
-
-    if isinstance(ts, str):
-        # ISO format
-        try:
-            # Handle various ISO formats
-            ts = ts.replace('Z', '+00:00')
-            if '.' in ts:
-                # Truncate microseconds if too long
-                parts = ts.split('.')
-                if len(parts) == 2:
-                    frac, tz = parts[1].split('+') if '+' in parts[1] else (parts[1].split('-')[0], '')
-                    if len(frac) > 6:
-                        frac = frac[:6]
-                    ts = parts[0] + '.' + frac + ('+' + tz if tz else '')
-            return datetime.fromisoformat(ts)
-        except ValueError:
-            pass
-
-    return datetime.now()
+    Delegates to the centralized parse_timestamp in timestamps.py.
+    See timestamps.py for full documentation of the timestamp convention.
+    """
+    return ts_parse_timestamp(ts)
 
 
 def parse_message(line: str) -> Optional[ParsedMessage]:
@@ -274,7 +257,7 @@ def parse_message(line: str) -> Optional[ParsedMessage]:
         data.get('timestamp') or
         data.get('created_at') or
         data.get('time') or
-        datetime.now()
+        utc_now()
     )
 
     # Extract model
