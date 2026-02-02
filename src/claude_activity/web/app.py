@@ -345,11 +345,20 @@ def create_app(config=None):
 
         Returns entries in chronological order (oldest first) for appending to feed.
         Each entry contains: id, timestamp, project_name, role, content_preview
+        Filters out empty messages and tool-only messages.
         """
+        # Common filter to exclude empty/tool-only messages
+        content_filter = """
+            AND m.content IS NOT NULL
+            AND m.content != ''
+            AND m.content NOT LIKE '[Tool:%'
+            AND m.content != '[Tool Result]'
+        """
+
         with db.connection() as conn:
             if since_id is not None:
                 # Incremental update: get new entries after since_id in chronological order
-                query = """
+                query = f"""
                     SELECT m.id, m.timestamp, m.role, m.content,
                            s.session_id, p.name as project_name, p.path as project_path
                     FROM messages m
@@ -357,6 +366,7 @@ def create_app(config=None):
                     JOIN projects p ON s.project_id = p.id
                     WHERE m.role IN ('user', 'assistant')
                       AND m.id > ?
+                      {content_filter}
                 """
                 params = [since_id]
                 if project_id is not None:
@@ -366,13 +376,14 @@ def create_app(config=None):
                 params.append(limit)
             else:
                 # Initial load: get recent entries, then reverse for chronological order
-                query = """
+                query = f"""
                     SELECT m.id, m.timestamp, m.role, m.content,
                            s.session_id, p.name as project_name, p.path as project_path
                     FROM messages m
                     JOIN sessions s ON m.session_id = s.id
                     JOIN projects p ON s.project_id = p.id
                     WHERE m.role IN ('user', 'assistant')
+                      {content_filter}
                 """
                 params = []
                 if project_id is not None:
@@ -404,8 +415,9 @@ def create_app(config=None):
                         preview += '...'
                     break
 
+            # Skip entries that still have no meaningful content
             if not preview:
-                preview = '(no content)'
+                continue
 
             entries.append({
                 'id': row['id'],
