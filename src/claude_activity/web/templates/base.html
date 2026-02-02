@@ -103,6 +103,11 @@
                                class="{% if request.endpoint == 'summaries' %}bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white{% else %}text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700{% endif %} px-3 py-2 rounded-md text-sm font-medium">
                                 Summaries
                             </a>
+                            <a href="{{ url_for('live') }}"
+                               class="{% if request.endpoint == 'live' %}bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100{% else %}text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/50{% endif %} px-3 py-2 rounded-md text-sm font-medium flex items-center">
+                                <span class="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
+                                Live
+                            </a>
                         </div>
                     </div>
 

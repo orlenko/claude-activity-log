@@ -1,0 +1,27 @@
+{% for entry in entries %}
+<div class="live-entry flex items-start space-x-3 py-1 hover:bg-gray-800/50 px-2 -mx-2 rounded transition-colors"
+     data-entry-id="{{ entry.id }}">
+    <!-- Timestamp -->
+    <span class="text-gray-500 flex-shrink-0 w-20">
+        {{ entry.timestamp|shorttime if entry.timestamp else 'unknown' }}
+    </span>
+
+    <!-- Project -->
+    <span class="text-purple-400 flex-shrink-0 w-32 truncate" title="{{ entry.project_path }}">
+        [{{ entry.project_name[:15] }}{% if entry.project_name|length > 15 %}..{% endif %}]
+    </span>
+
+    <!-- Role indicator -->
+    {% if entry.role == 'user' %}
+    <span class="text-blue-400 flex-shrink-0 w-12">user</span>
+    {% else %}
+    <span class="text-green-400 flex-shrink-0 w-12">agent</span>
+    {% endif %}
+
+    <!-- Content preview -->
+    <a href="{{ url_for('session_detail', session_id=entry.session_id) }}"
+       class="text-gray-300 hover:text-white truncate flex-1">
+        {{ entry.preview }}
+    </a>
+</div>
+{% endfor %}

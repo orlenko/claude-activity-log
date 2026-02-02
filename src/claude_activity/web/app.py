@@ -71,6 +71,18 @@ def create_app(config=None):
             return utc_to_local(dt).strftime('%Y-%m-%d')
         return str(dt)
 
+    @app.template_filter('shorttime')
+    def shorttime_filter(dt):
+        """Convert UTC datetime to short time string (HH:MM:SS).
+
+        All stored timestamps are in UTC. This filter converts for display.
+        """
+        if dt is None:
+            return ''
+        if isinstance(dt, datetime):
+            return utc_to_local(dt).strftime('%H:%M:%S')
+        return str(dt)
+
     @app.template_filter('timeago')
     def timeago_filter(dt):
         """Convert UTC datetime to relative time string.
@@ -311,6 +323,85 @@ def create_app(config=None):
                              projects=projects,
                              selected_project_id=project_id)
 
+    @app.route('/live')
+    def live():
+        """Live activity feed page - shows recent activity in real-time."""
+        db = Database(config)
+        project_id = request.args.get('project_id', type=int)
+
+        # Get all projects for filter dropdown
+        projects = db.list_projects()
+
+        # Get initial batch of live entries
+        entries = _get_live_entries(db, project_id, limit=100)
+
+        return render_template('live.html',
+                             entries=entries,
+                             projects=projects,
+                             selected_project_id=project_id)
+
+    def _get_live_entries(db: Database, project_id: Optional[int] = None, limit: int = 100, since_id: Optional[int] = None) -> list[dict]:
+        """Get recent message entries for live feed.
+
+        Returns entries in reverse chronological order (newest first).
+        Each entry contains: id, timestamp, project_name, role, content_preview
+        """
+        with db.connection() as conn:
+            query = """
+                SELECT m.id, m.timestamp, m.role, m.content,
+                       s.session_id, p.name as project_name, p.path as project_path
+                FROM messages m
+                JOIN sessions s ON m.session_id = s.id
+                JOIN projects p ON s.project_id = p.id
+                WHERE m.role IN ('user', 'assistant')
+            """
+            params = []
+
+            if project_id is not None:
+                query += " AND s.project_id = ?"
+                params.append(project_id)
+
+            if since_id is not None:
+                query += " AND m.id > ?"
+                params.append(since_id)
+
+            query += " ORDER BY m.id DESC LIMIT ?"
+            params.append(limit)
+
+            cursor = conn.execute(query, params)
+            rows = [dict(row) for row in cursor.fetchall()]
+
+        # Process entries to create preview
+        entries = []
+        for row in rows:
+            content = row.get('content', '') or ''
+
+            # Clean up content - remove tool markers, get first meaningful line
+            lines = content.strip().split('\n')
+            preview = ''
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('[Tool:') and line != '[Tool Result]':
+                    preview = line[:150]
+                    if len(line) > 150:
+                        preview += '...'
+                    break
+
+            if not preview:
+                preview = '(no content)'
+
+            entries.append({
+                'id': row['id'],
+                'timestamp': row['timestamp'],
+                'project_name': row['project_name'],
+                'project_path': row['project_path'],
+                'session_id': row['session_id'],
+                'role': row['role'],
+                'preview': preview
+            })
+
+        return entries
+
     # ============= Summary Routes =============
 
     @app.route('/summaries')
@@ -497,6 +588,18 @@ def create_app(config=None):
         except Exception as e:
             return render_template('partials/session_context.html',
                                  error=str(e))
+
+    @app.route('/api/live/entries')
+    def api_live_entries():
+        """Get live feed entries for HTMX polling."""
+        db = Database(config)
+        project_id = request.args.get('project_id', type=int)
+        since_id = request.args.get('since_id', type=int)
+        limit = request.args.get('limit', 50, type=int)
+
+        entries = _get_live_entries(db, project_id, limit=limit, since_id=since_id)
+
+        return render_template('partials/live_entries.html', entries=entries)
 
     @app.route('/api/session-context/<session_id>/raw', methods=['GET'])
     def get_session_context_raw(session_id):
