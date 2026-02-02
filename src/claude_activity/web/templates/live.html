@@ -66,7 +66,7 @@
         <div id="live-feed" class="h-[600px] overflow-y-auto p-4 space-y-1"
              hx-get="{{ url_for('api_live_entries', project_id=selected_project_id) }}"
              hx-trigger="every 2s"
-             hx-swap="afterbegin"
+             hx-swap="beforeend"
              hx-target="#live-entries">
             <div id="live-entries">
                 {% include "partials/live_entries.html" %}
@@ -93,11 +93,12 @@
     const liveFeed = document.getElementById('live-feed');
     const liveEntries = document.getElementById('live-entries');
 
-    // Track the latest entry ID for incremental updates
+    // Track the latest entry ID for incremental updates (last entry = newest)
     function updateLastSeenId() {
-        const firstEntry = liveEntries.querySelector('[data-entry-id]');
-        if (firstEntry) {
-            lastSeenId = parseInt(firstEntry.dataset.entryId, 10);
+        const allEntries = liveEntries.querySelectorAll('[data-entry-id]');
+        if (allEntries.length > 0) {
+            const lastEntry = allEntries[allEntries.length - 1];
+            lastSeenId = parseInt(lastEntry.dataset.entryId, 10);
         }
     }
 
@@ -124,17 +125,18 @@
         updateLastSeenId();
         updateEntryCount();
 
-        // Auto-scroll if enabled
-        if (document.getElementById('auto-scroll').checked && !isPaused) {
-            liveFeed.scrollTop = 0;  // Scroll to top since newest are first
-        }
-
-        // Limit total entries to prevent memory issues
+        // Limit total entries to 1000 - remove oldest from top
         const entries = liveEntries.querySelectorAll('.live-entry');
-        if (entries.length > 1000) {
-            for (let i = 1000; i < entries.length; i++) {
+        const excess = entries.length - 1000;
+        if (excess > 0) {
+            for (let i = 0; i < excess; i++) {
                 entries[i].remove();
             }
+        }
+
+        // Auto-scroll to bottom if enabled
+        if (document.getElementById('auto-scroll').checked && !isPaused) {
+            liveFeed.scrollTop = liveFeed.scrollHeight;
         }
     });
 
@@ -178,5 +180,8 @@
 
     // Initialize
     updateLastSeenId();
+
+    // Scroll to bottom on initial load
+    liveFeed.scrollTop = liveFeed.scrollHeight;
 </script>
 {% endblock %}

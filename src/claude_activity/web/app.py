@@ -343,33 +343,50 @@ def create_app(config=None):
     def _get_live_entries(db: Database, project_id: Optional[int] = None, limit: int = 100, since_id: Optional[int] = None) -> list[dict]:
         """Get recent message entries for live feed.
 
-        Returns entries in reverse chronological order (newest first).
+        Returns entries in chronological order (oldest first) for appending to feed.
         Each entry contains: id, timestamp, project_name, role, content_preview
         """
         with db.connection() as conn:
-            query = """
-                SELECT m.id, m.timestamp, m.role, m.content,
-                       s.session_id, p.name as project_name, p.path as project_path
-                FROM messages m
-                JOIN sessions s ON m.session_id = s.id
-                JOIN projects p ON s.project_id = p.id
-                WHERE m.role IN ('user', 'assistant')
-            """
-            params = []
-
-            if project_id is not None:
-                query += " AND s.project_id = ?"
-                params.append(project_id)
-
             if since_id is not None:
-                query += " AND m.id > ?"
-                params.append(since_id)
-
-            query += " ORDER BY m.id DESC LIMIT ?"
-            params.append(limit)
+                # Incremental update: get new entries after since_id in chronological order
+                query = """
+                    SELECT m.id, m.timestamp, m.role, m.content,
+                           s.session_id, p.name as project_name, p.path as project_path
+                    FROM messages m
+                    JOIN sessions s ON m.session_id = s.id
+                    JOIN projects p ON s.project_id = p.id
+                    WHERE m.role IN ('user', 'assistant')
+                      AND m.id > ?
+                """
+                params = [since_id]
+                if project_id is not None:
+                    query += " AND s.project_id = ?"
+                    params.append(project_id)
+                query += " ORDER BY m.id ASC LIMIT ?"
+                params.append(limit)
+            else:
+                # Initial load: get recent entries, then reverse for chronological order
+                query = """
+                    SELECT m.id, m.timestamp, m.role, m.content,
+                           s.session_id, p.name as project_name, p.path as project_path
+                    FROM messages m
+                    JOIN sessions s ON m.session_id = s.id
+                    JOIN projects p ON s.project_id = p.id
+                    WHERE m.role IN ('user', 'assistant')
+                """
+                params = []
+                if project_id is not None:
+                    query += " AND s.project_id = ?"
+                    params.append(project_id)
+                query += " ORDER BY m.id DESC LIMIT ?"
+                params.append(limit)
 
             cursor = conn.execute(query, params)
             rows = [dict(row) for row in cursor.fetchall()]
+
+        # For initial load, reverse to get chronological order
+        if since_id is None:
+            rows = list(reversed(rows))
 
         # Process entries to create preview
         entries = []
