@@ -61,17 +61,39 @@
         <div class="divide-y divide-gray-200 dark:divide-gray-700">
             {% for session in sessions %}
             <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
-               class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <div class="text-sm font-mono text-claude-orange">{{ session.session_id[:12] }}</div>
+               class="block px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors {% if session.pending_question_data %}border-l-4 border-amber-400 pl-5{% endif %}">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center space-x-2 mb-1">
+                            <!-- Pending question indicator -->
+                            {% if session.pending_question_data %}
+                            <span class="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded font-medium animate-pulse">
+                                Awaiting Input
+                            </span>
+                            {% endif %}
+                            <span class="text-sm font-mono text-claude-orange">{{ session.session_id[:12] }}</span>
+                            {% if session.git_branch %}
+                            <span class="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                                {{ session.git_branch }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <!-- Pending question/tool preview -->
+                        {% if session.pending_question_data %}
+                        <p class="text-sm text-amber-600 dark:text-amber-400 truncate mt-1">
+                            {% if session.pending_question_data.question %}
+                            → "{{ session.pending_question_data.question[:100] }}{% if session.pending_question_data.question|length > 100 %}...{% endif %}"
+                            {% else %}
+                            → Waiting for {{ session.pending_question_data.tool_name }} permission
+                            {% endif %}
+                        </p>
+                        {% endif %}
                         <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             <span class="text-blue-600 dark:text-blue-400">{{ session.user_count }}</span> user /
                             <span class="text-green-600 dark:text-green-400">{{ session.assistant_count }}</span> assistant messages
-                            {% if session.git_branch %}&middot; {{ session.git_branch }}{% endif %}
                         </div>
                     </div>
-                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                    <div class="ml-4 flex-shrink-0 text-sm text-gray-500 dark:text-gray-400">
                         {{ session.started_at|timeago }}
                     </div>
                 </div>

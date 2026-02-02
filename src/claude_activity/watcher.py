@@ -18,7 +18,8 @@ from .parser import (
     parse_session_file,
     get_session_id_from_path,
     get_project_path_from_file,
-    extract_project_info
+    extract_project_info,
+    extract_pending_question_from_raw_messages
 )
 from .cursor_parser import (
     parse_cursor_session_file,
@@ -41,13 +42,22 @@ class SessionFileHandler(FileSystemEventHandler):
         self.config = config
         self._processing = set()
 
+    def _is_subagent_file(self, file_path: Path) -> bool:
+        """Check if file is a subagent transcript (should be skipped)."""
+        # Subagent files are in: .../session-id/subagents/agent-*.jsonl
+        return 'subagents' in file_path.parts
+
     def on_created(self, event):
         if not event.is_directory and event.src_path.endswith('.jsonl'):
-            self._process_file(Path(event.src_path))
+            file_path = Path(event.src_path)
+            if not self._is_subagent_file(file_path):
+                self._process_file(file_path)
 
     def on_modified(self, event):
         if not event.is_directory and event.src_path.endswith('.jsonl'):
-            self._process_file(Path(event.src_path))
+            file_path = Path(event.src_path)
+            if not self._is_subagent_file(file_path):
+                self._process_file(file_path)
 
     def _process_file(self, file_path: Path):
         """Process a session file, reading only new content."""
@@ -67,6 +77,8 @@ class SessionFileHandler(FileSystemEventHandler):
 
     def _do_process(self, file_path: Path):
         """Actually process the file."""
+        import json
+
         if not file_path.exists():
             return
 
@@ -75,12 +87,15 @@ class SessionFileHandler(FileSystemEventHandler):
 
         # Parse messages and collect them
         messages_to_insert = []
+        raw_messages = []  # Keep raw data for pending question detection
         project_path = None
         git_branch = None
         final_pos = last_pos
 
         for message, end_pos in parse_session_file(file_path, last_pos):
             messages_to_insert.append(message)
+            if message.raw_data:
+                raw_messages.append(message.raw_data)
             # Extract project path from first message that has cwd
             if project_path is None and message.cwd:
                 project_path = message.cwd
@@ -144,6 +159,35 @@ class SessionFileHandler(FileSystemEventHandler):
                 message_count=message_count
             )
             logger.info(f"Processed {message_count} new messages from {file_path.name}")
+
+        # Check for pending questions (need to read full file for context)
+        # Re-read the entire file to get all raw messages for question detection
+        all_raw_messages = []
+        for message, _ in parse_session_file(file_path, 0):
+            if message.raw_data:
+                all_raw_messages.append(message.raw_data)
+
+        pending_question = extract_pending_question_from_raw_messages(all_raw_messages)
+
+        if pending_question:
+            question_json = json.dumps({
+                'tool_name': pending_question.get('tool_name', 'Unknown'),
+                'question': pending_question.get('question'),  # May be None for non-AskUserQuestion
+                'header': pending_question.get('header'),
+                'tool_use_id': pending_question.get('tool_use_id', '')
+            })
+            self.db.update_session_pending_question(
+                session_uuid,
+                pending_question=question_json,
+                pending_question_time=pending_question.get('timestamp')
+            )
+        else:
+            # Clear any existing pending question
+            self.db.update_session_pending_question(
+                session_uuid,
+                pending_question=None,
+                pending_question_time=None
+            )
 
 
 class CursorSessionFileHandler(FileSystemEventHandler):
@@ -302,6 +346,9 @@ class Watcher:
     def _process_existing_claude_files(self, watch_path: Path, handler: SessionFileHandler):
         """Process any existing Claude session files on startup."""
         for jsonl_file in watch_path.rglob("*.jsonl"):
+            # Skip subagent files - they're internal to Claude Code
+            if handler._is_subagent_file(jsonl_file):
+                continue
             try:
                 handler._process_file(jsonl_file)
             except Exception as e:

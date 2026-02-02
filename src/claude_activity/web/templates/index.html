@@ -86,10 +86,16 @@
                 <div class="ml-7 space-y-2">
                     {% for session in item.sessions %}
                     <a href="{{ url_for('session_detail', session_id=session.session_id) }}"
-                       class="block p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                       class="block p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors {% if session.pending_question_data %}border-l-4 border-amber-400 pl-2{% endif %}">
                         <div class="flex items-start justify-between">
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center space-x-2 mb-1">
+                                    <!-- Pending question indicator -->
+                                    {% if session.pending_question_data %}
+                                    <span class="text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded font-medium animate-pulse">
+                                        Awaiting Input
+                                    </span>
+                                    {% endif %}
                                     <!-- Source indicator -->
                                     {% if session.source == 'cursor' %}
                                     <span class="text-xs px-1 py-0.5 bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded font-medium" title="Cursor">C</span>
@@ -103,11 +109,21 @@
                                     </span>
                                     {% endif %}
                                 </div>
+                                <!-- Pending question/tool preview -->
+                                {% if session.pending_question_data %}
+                                <p class="text-sm text-amber-600 dark:text-amber-400 truncate mb-1">
+                                    {% if session.pending_question_data.question %}
+                                    → "{{ session.pending_question_data.question[:80] }}{% if session.pending_question_data.question|length > 80 %}...{% endif %}"
+                                    {% else %}
+                                    → Waiting for {{ session.pending_question_data.tool_name }} permission
+                                    {% endif %}
+                                </p>
+                                {% endif %}
                                 {% if session.first_message %}
                                 <p class="text-sm text-gray-600 dark:text-gray-300 truncate">
                                     {{ session.first_message }}
                                 </p>
-                                {% else %}
+                                {% elif not session.pending_question_data %}
                                 <p class="text-sm text-gray-400 dark:text-gray-500 italic">
                                     No preview available
                                 </p>

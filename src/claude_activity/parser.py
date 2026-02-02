@@ -349,3 +349,188 @@ def get_project_path_from_file(file_path: Path) -> Optional[str]:
         pass
 
     return None
+
+
+def extract_pending_question(messages: list[dict]) -> Optional[dict]:
+    """Check if session has an unanswered AskUserQuestion.
+
+    Looks for the last assistant message containing an AskUserQuestion tool_use block
+    and checks if there's a subsequent user message with a matching tool_result.
+
+    Args:
+        messages: List of message dicts from the database (with 'role', 'content', 'timestamp')
+
+    Returns:
+        Dict with question data if pending, None if answered or no question.
+        Format: {
+            "tool_use_id": "toolu_...",
+            "question": "What tech stack do you prefer?",
+            "header": "Tech Stack",
+            "timestamp": datetime
+        }
+    """
+    if not messages:
+        return None
+
+    # Find the last assistant message with AskUserQuestion tool_use
+    last_question = None
+    last_question_idx = -1
+
+    for i, msg in enumerate(messages):
+        if msg.get('role') != 'assistant':
+            continue
+
+        content = msg.get('content', '')
+        if not content:
+            continue
+
+        # Parse content to find tool_use blocks
+        # Content may be stored as text with [Tool: ...] markers or as raw JSON
+        raw_data = msg.get('raw_data')
+        if raw_data and isinstance(raw_data, dict):
+            msg_content = raw_data.get('message', {}).get('content', [])
+            if isinstance(msg_content, list):
+                for block in msg_content:
+                    if isinstance(block, dict) and block.get('type') == 'tool_use' and block.get('name') == 'AskUserQuestion':
+                        tool_input = block.get('input', {})
+                        questions = tool_input.get('questions', [])
+                        if questions:
+                            first_q = questions[0]
+                            last_question = {
+                                'tool_use_id': block.get('id'),
+                                'question': first_q.get('question', ''),
+                                'header': first_q.get('header', ''),
+                                'timestamp': msg.get('timestamp')
+                            }
+                            last_question_idx = i
+
+    if not last_question:
+        return None
+
+    # Check if there's a subsequent user message with a matching tool_result
+    for msg in messages[last_question_idx + 1:]:
+        if msg.get('role') != 'user':
+            continue
+
+        raw_data = msg.get('raw_data')
+        if raw_data and isinstance(raw_data, dict):
+            msg_content = raw_data.get('message', {}).get('content', [])
+            if isinstance(msg_content, list):
+                for block in msg_content:
+                    if isinstance(block, dict) and block.get('type') == 'tool_result':
+                        if block.get('tool_use_id') == last_question['tool_use_id']:
+                            # Question has been answered
+                            return None
+
+    # Question is still pending
+    return last_question
+
+
+def extract_pending_question_from_raw_messages(raw_messages: list[dict]) -> Optional[dict]:
+    """Check if session has a pending tool_use awaiting user input.
+
+    Detects two types of pending input:
+    1. AskUserQuestion - explicit questions to the user
+    2. Any tool_use without a matching tool_result - waiting for permission/approval
+
+    Args:
+        raw_messages: List of raw message dicts from JSONL parsing
+
+    Returns:
+        Dict with pending input data if found, None otherwise.
+        Format: {
+            "tool_use_id": "toolu_...",
+            "tool_name": "Bash" or "AskUserQuestion",
+            "question": "What tech stack?" (for AskUserQuestion) or None,
+            "header": "Tech Stack" (for AskUserQuestion) or None,
+            "timestamp": datetime
+        }
+    """
+    if not raw_messages:
+        return None
+
+    # Collect all tool_use blocks and their indices
+    tool_uses = []  # [(index, tool_use_id, tool_name, question_data, timestamp), ...]
+
+    for i, data in enumerate(raw_messages):
+        if not isinstance(data, dict):
+            continue
+
+        # Check if this is an assistant message
+        role = data.get('role')
+        msg = data.get('message', {})
+        if isinstance(msg, dict):
+            role = role or msg.get('role')
+            content = msg.get('content', [])
+        else:
+            content = data.get('content', [])
+
+        if role != 'assistant':
+            continue
+
+        if not isinstance(content, list):
+            continue
+
+        # Collect all tool_use blocks from this message
+        timestamp = data.get('timestamp') or data.get('created_at')
+        for block in content:
+            if isinstance(block, dict) and block.get('type') == 'tool_use':
+                tool_name = block.get('name', 'Unknown')
+                tool_use_id = block.get('id')
+
+                # Extract question data if it's AskUserQuestion
+                question_data = None
+                if tool_name == 'AskUserQuestion':
+                    tool_input = block.get('input', {})
+                    questions = tool_input.get('questions', [])
+                    if questions:
+                        first_q = questions[0]
+                        question_data = {
+                            'question': first_q.get('question', ''),
+                            'header': first_q.get('header', '')
+                        }
+
+                tool_uses.append((i, tool_use_id, tool_name, question_data, timestamp))
+
+    if not tool_uses:
+        return None
+
+    # Collect all tool_result IDs
+    answered_tool_ids = set()
+    for data in raw_messages:
+        if not isinstance(data, dict):
+            continue
+
+        role = data.get('role')
+        msg = data.get('message', {})
+        if isinstance(msg, dict):
+            role = role or msg.get('role')
+            content = msg.get('content', [])
+        else:
+            content = data.get('content', [])
+
+        if role != 'user':
+            continue
+
+        if not isinstance(content, list):
+            continue
+
+        for block in content:
+            if isinstance(block, dict) and block.get('type') == 'tool_result':
+                answered_tool_ids.add(block.get('tool_use_id'))
+
+    # Find the last unanswered tool_use
+    for idx, tool_use_id, tool_name, question_data, timestamp in reversed(tool_uses):
+        if tool_use_id not in answered_tool_ids:
+            result = {
+                'tool_use_id': tool_use_id,
+                'tool_name': tool_name,
+                'timestamp': parse_timestamp(timestamp) if timestamp else None
+            }
+            if question_data:
+                result['question'] = question_data['question']
+                result['header'] = question_data['header']
+            return result
+
+    # All tool_uses have been answered
+    return None

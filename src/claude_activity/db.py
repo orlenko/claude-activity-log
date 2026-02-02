@@ -88,7 +88,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at TIMESTAMP,
     ended_at TIMESTAMP,
     message_count INTEGER DEFAULT 0,
-    source TEXT DEFAULT 'claude_code'  -- 'claude_code' or 'cursor'
+    source TEXT DEFAULT 'claude_code',  -- 'claude_code' or 'cursor'
+    pending_question TEXT,  -- JSON with question data if awaiting user input
+    pending_question_time TIMESTAMP  -- When the question was asked
 );
 
 -- Individual messages
@@ -151,6 +153,12 @@ class Database:
             columns = [row['name'] for row in cursor.fetchall()]
             if 'source' not in columns:
                 conn.execute("ALTER TABLE sessions ADD COLUMN source TEXT DEFAULT 'claude_code'")
+            # Migration: add pending_question columns if they don't exist
+            if 'pending_question' not in columns:
+                conn.execute("ALTER TABLE sessions ADD COLUMN pending_question TEXT")
+            if 'pending_question_time' not in columns:
+                conn.execute("ALTER TABLE sessions ADD COLUMN pending_question_time TIMESTAMP")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_pending ON sessions(pending_question_time)")
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -251,6 +259,25 @@ class Database:
                     f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = ?",
                     params
                 )
+
+    def update_session_pending_question(
+        self,
+        session_id: str,
+        pending_question: Optional[str],
+        pending_question_time: Optional[datetime]
+    ):
+        """Update session's pending question fields.
+
+        Args:
+            session_id: The session UUID
+            pending_question: JSON string with question data, or None to clear
+            pending_question_time: When the question was asked, or None to clear
+        """
+        with self.connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET pending_question = ?, pending_question_time = ? WHERE session_id = ?",
+                (pending_question, pending_question_time, session_id)
+            )
 
     def get_session(self, session_id: str) -> Optional[dict]:
         """Get session by UUID."""

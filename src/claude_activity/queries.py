@@ -3,6 +3,7 @@
 For timestamp handling conventions, see timestamps.py.
 """
 
+import json
 from datetime import datetime, date, timedelta
 from typing import Optional
 
@@ -13,7 +14,12 @@ from .timestamps import (
     local_to_utc,
     get_today_utc_range,
     get_local_offset,
+    utc_now,
 )
+
+
+# Pending questions older than this are not highlighted (considered abandoned)
+PENDING_QUESTION_MAX_AGE_DAYS = 3
 
 
 def get_today_range() -> tuple[datetime, datetime]:
@@ -122,10 +128,51 @@ class QueryHelper:
         since: Optional[datetime] = None,
         limit: int = 20
     ) -> list[dict]:
-        """Get recent sessions with message counts and first message snippet."""
-        sessions = self.db.list_sessions(project_id=project_id, since=since, limit=limit)
+        """Get recent sessions with message counts and first message snippet.
 
-        # Enrich with message data
+        Sessions with pending questions (asked within the last 3 days) are sorted first.
+        """
+        # Calculate cutoff for pending questions
+        pending_cutoff = utc_now() - timedelta(days=PENDING_QUESTION_MAX_AGE_DAYS)
+
+        # Get sessions with custom sorting (pending questions first)
+        with self.db.connection() as conn:
+            query = """
+                SELECT s.*, p.name as project_name, p.path as project_path,
+                    CASE
+                        WHEN s.pending_question IS NOT NULL
+                             AND s.pending_question_time >= ?
+                        THEN 1
+                        ELSE 0
+                    END as has_active_pending
+                FROM sessions s
+                LEFT JOIN projects p ON s.project_id = p.id
+            """
+            conditions = []
+            params = [pending_cutoff]
+
+            if project_id is not None:
+                conditions.append("s.project_id = ?")
+                params.append(project_id)
+            if since is not None:
+                conditions.append("s.started_at >= ?")
+                params.append(since)
+
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+
+            # Sort: pending questions first (by question time desc), then by start time desc
+            query += """
+                ORDER BY has_active_pending DESC,
+                         CASE WHEN has_active_pending = 1 THEN s.pending_question_time ELSE s.started_at END DESC
+                LIMIT ?
+            """
+            params.append(limit)
+
+            cursor = conn.execute(query, params)
+            sessions = [dict(row) for row in cursor.fetchall()]
+
+        # Enrich with message data and parse pending question
         for session in sessions:
             messages = self.db.get_messages_for_session(session['id'])
             user_messages = [m for m in messages if m.get('role') == 'user']
@@ -144,6 +191,14 @@ class QueryHelper:
                         first_line = first_line[:150] + '...'
                     session['first_message'] = first_line
                     break
+
+            # Parse pending question JSON and check if it's still active
+            session['pending_question_data'] = None
+            if session.get('pending_question') and session.get('has_active_pending'):
+                try:
+                    session['pending_question_data'] = json.loads(session['pending_question'])
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
         return sessions
 
@@ -174,35 +229,64 @@ class QueryHelper:
     ) -> list[dict]:
         """Get projects sorted by most recent session, with their recent sessions.
 
+        Sessions with pending questions (asked within the last 3 days) are highlighted.
+        Projects with pending questions are sorted first.
+
         Returns a tree structure:
         [
             {
                 'project': {...},
                 'last_activity': datetime,
+                'has_pending': bool,
                 'sessions': [
-                    {'session': {...}, 'first_message': '...'},
+                    {'session': {...}, 'first_message': '...', 'pending_question_data': {...}},
                     ...
                 ]
             },
             ...
         ]
         """
+        pending_cutoff = utc_now() - timedelta(days=PENDING_QUESTION_MAX_AGE_DAYS)
+
         with self.db.connection() as conn:
-            # Get projects with their most recent session timestamp
+            # Get projects with their most recent session timestamp and pending status
             cursor = conn.execute("""
-                SELECT p.*, MAX(s.started_at) as last_activity
+                SELECT p.*,
+                       MAX(s.started_at) as last_activity,
+                       MAX(CASE
+                           WHEN s.pending_question IS NOT NULL
+                                AND s.pending_question_time >= ?
+                           THEN 1
+                           ELSE 0
+                       END) as has_pending
                 FROM projects p
                 JOIN sessions s ON s.project_id = p.id
                 GROUP BY p.id
-                ORDER BY last_activity DESC
+                ORDER BY has_pending DESC, last_activity DESC
                 LIMIT ?
-            """, (project_limit,))
+            """, (pending_cutoff, project_limit))
             projects_with_activity = [dict(row) for row in cursor.fetchall()]
 
         result = []
         for proj in projects_with_activity:
-            # Get recent sessions for this project
-            sessions = self.db.list_sessions(project_id=proj['id'], limit=sessions_per_project)
+            # Get recent sessions for this project with pending question sorting
+            with self.db.connection() as conn:
+                cursor = conn.execute("""
+                    SELECT s.*, p.name as project_name, p.path as project_path,
+                        CASE
+                            WHEN s.pending_question IS NOT NULL
+                                 AND s.pending_question_time >= ?
+                            THEN 1
+                            ELSE 0
+                        END as has_active_pending
+                    FROM sessions s
+                    LEFT JOIN projects p ON s.project_id = p.id
+                    WHERE s.project_id = ?
+                    ORDER BY has_active_pending DESC,
+                             CASE WHEN has_active_pending = 1 THEN s.pending_question_time ELSE s.started_at END DESC
+                    LIMIT ?
+                """, (pending_cutoff, proj['id'], sessions_per_project))
+                sessions = [dict(row) for row in cursor.fetchall()]
 
             # Enrich sessions with message counts and first message
             enriched_sessions = []
@@ -225,6 +309,14 @@ class QueryHelper:
                         session['first_message'] = first_line
                         break
 
+                # Parse pending question JSON
+                session['pending_question_data'] = None
+                if session.get('pending_question') and session.get('has_active_pending'):
+                    try:
+                        session['pending_question_data'] = json.loads(session['pending_question'])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
                 # Only include sessions with actual messages
                 if session['user_count'] > 0 or session['assistant_count'] > 0:
                     enriched_sessions.append(session)
@@ -233,6 +325,7 @@ class QueryHelper:
                 result.append({
                     'project': proj,
                     'last_activity': proj['last_activity'],
+                    'has_pending': bool(proj.get('has_pending')),
                     'sessions': enriched_sessions
                 })
 
