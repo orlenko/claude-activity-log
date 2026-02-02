@@ -164,37 +164,43 @@ def extract_project_info(project_path: str, claude_projects_dir: Optional[Path] 
 
 
 def extract_text_content(content: Any) -> Optional[str]:
-    """Extract text content from various message content formats."""
+    """Extract text content from various message content formats.
+
+    Only returns actual text content. Returns None for:
+    - Empty content
+    - Tool-only messages (tool_use, tool_result)
+    - Thinking-only messages
+    """
     if content is None:
         return None
 
     if isinstance(content, str):
-        return content
+        return content if content.strip() else None
 
     if isinstance(content, list):
-        # Handle content blocks format
+        # Handle content blocks format - only extract actual text
         text_parts = []
         for block in content:
             if isinstance(block, dict):
                 if block.get('type') == 'text':
-                    text_parts.append(block.get('text', ''))
-                elif block.get('type') == 'tool_use':
-                    # Summarize tool use
-                    tool_name = block.get('name', 'unknown')
-                    text_parts.append(f"[Tool: {tool_name}]")
-                elif block.get('type') == 'tool_result':
-                    text_parts.append("[Tool Result]")
+                    text = block.get('text', '')
+                    if text.strip():
+                        text_parts.append(text)
+                # Skip tool_use, tool_result, thinking - they don't have user-visible text
             elif isinstance(block, str):
-                text_parts.append(block)
+                if block.strip():
+                    text_parts.append(block)
         return '\n'.join(text_parts) if text_parts else None
 
     if isinstance(content, dict):
         if 'text' in content:
-            return content['text']
+            text = content['text']
+            return text if text and text.strip() else None
         if 'message' in content:
             return extract_text_content(content['message'])
 
-    return str(content)
+    result = str(content)
+    return result if result.strip() else None
 
 
 def parse_timestamp(ts: Any) -> datetime:

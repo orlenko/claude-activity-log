@@ -121,12 +121,16 @@ class SessionFileHandler(FileSystemEventHandler):
             session_uuid, project_id, git_branch=git_branch, source='claude_code'
         )
 
-        # Insert messages
+        # Insert messages (skip empty ones)
         message_count = 0
         first_timestamp = None
         last_timestamp = None
 
         for message in messages_to_insert:
+            # Skip messages with no meaningful content
+            if not message.content or not message.content.strip():
+                continue
+
             result = self.db.insert_message(
                 session_db_id=session_db_id,
                 uuid=message.uuid,
